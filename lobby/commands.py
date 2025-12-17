@@ -381,7 +381,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "create_lobby":
         await create_lobby(update, context)
     elif data == "join_lobby":
-        await join_lobby(update, context)
+        return await join_lobby(update, context)
     elif data == "my_lobby":
         await my_lobby_info(update, context)
     elif data == "leave_lobby":
@@ -398,7 +398,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # TODO: Показать детальную информацию о лобби
         await query.answer("Функция в разработке", show_alert=True)
     elif data == "back_to_menu":
-        await lobby_menu(update, context)
+        return await lobby_menu(update, context)
     elif data == "lobby_info":
         await my_lobby_info(update, context)
     else:
