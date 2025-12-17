@@ -1,0 +1,27 @@
+[tool.flake8]
+application-import-names = ['lobby', 'handlers']
+exclude = [".git","__pycache",".venv","*migrations/"]
+import-order-style = "google"
+max-line-length = 88
+
+[tool.black]
+line-length = 88
+skip-string-normalization = true
+include = '\.pyi?$'
+exclude = '''
+(
+  .vscode
+  |venv
+  |.venv
+  |migrations/
+  |.git
+  |__pycache__/
+  |__init__.py
+  |fixtures/
+  |requirements/
+  |.gitignore
+  |template.env
+  |.env
+  |.flake8
+)
+'''

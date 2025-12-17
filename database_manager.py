@@ -1,6 +1,6 @@
 import threading
 import sqlite3
-import os
+
 
 class SingletonMeta(type):
     _instances = {}
@@ -16,23 +16,23 @@ class SingletonMeta(type):
 
 class DatabaseManager(metaclass=SingletonMeta):
     def __init__(self, db_name="data/database.db"):
-        if not hasattr(self, 'connection'):
+        if not hasattr(self, "connection"):
             self.db_name = db_name
             self._connection = None
             self.cursor = None
             self._connect()
 
     def _connect(self):
-#        flag = False
-#        if not os.path.exists(self.db_name):
-#            flag = True
+        # flag = False
+        # if not os.path.exists(self.db_name):
+        #     flag = True
 
         if self._connection is None:
             self._connection = sqlite3.connect(self.db_name, check_same_thread=False)
             self.cursor = self._connection.cursor()
 
-#        if flag:
-#            self.create_tables()
+        # if flag:
+        #     self.create_tables()
         self.create_tables()
 
     def create_tables(self):
@@ -50,7 +50,7 @@ class DatabaseManager(metaclass=SingletonMeta):
             )
             """
         )
-        
+
         # Создадим также таблицу для игроков в лобби
         self.cursor.execute(
             """
@@ -70,4 +70,3 @@ class DatabaseManager(metaclass=SingletonMeta):
         if self._connection is not None:
             self._connection.close()
             self._connection = None
-

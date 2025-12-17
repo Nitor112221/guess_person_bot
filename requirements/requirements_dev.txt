@@ -1,0 +1,4 @@
+-r requirements_prod.txt
+black==25.12.0
+flake8==7.3.0
+Flake8-pyproject==1.2.4
