@@ -16,8 +16,7 @@ class LobbyManager:
         return secrets.token_urlsafe(8).upper().replace('_', '').replace('-', '')[:8]
     
     def create_lobby(self, host_id: int, max_players: int = 4, 
-                    is_private: bool = False, 
-                    password: str = None) -> Dict[str, Any]:
+                    is_private: bool = False) -> Dict[str, Any]:
         """Создание нового лобби"""
         try:
             invite_code = self.generate_invite_code()

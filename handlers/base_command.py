@@ -1,36 +1,20 @@
 from telegram import Update, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from typing import Dict
 import random
+from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
+
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start. Приветствие и начало регистрации."""
-    chat_id = update.effective_chat.id
+    """Обработчик команды /start"""
     user = update.effective_user
-
-    # if chat_id in active_games:
-    #     await update.message.reply_text("Игра уже идет в этом чате!")
-    #     return
-
-    # Создаем новую игру
-    # game = Game(chat_id, CHARACTERS_POOL)
-    # active_games[chat_id] = game
-    # game.add_player(user.id, user.first_name)
-
     await update.message.reply_text(
-        f"Добро пожаловать в игру 'Угадай персонажа'!\n"
-        f"Игрок {user.first_name} зарегистрирован.\n"
-        f"Другие игроки пишут /join чтобы присоединиться.\n"
-        f"Когда все готовы, напишите /startgame"
+        f"Привет, {user.first_name}! Добро пожаловать в игрового бота!\n\n"
+        "Доступные команды:\n"
+        "/lobby - Управление лобби\n"
+        "/my_lobby - Моё текущее лобби\n"
+        "/help - Помощь"
     )
-    
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Повторяет сообщение пользователя"""
-    # Получаем текст сообщения
-    user_message = update.message.text
-    
-    # Отправляем тот же текст обратно
-    await update.message.reply_text(user_message)
-    
 
