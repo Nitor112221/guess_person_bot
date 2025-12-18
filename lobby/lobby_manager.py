@@ -1,6 +1,8 @@
 import secrets
 from typing import Optional, Dict, Any
 
+from dto.lobby_dto import LobbyDTO
+
 
 class LobbyManager:
     def __init__(self, db_manager):
@@ -11,7 +13,7 @@ class LobbyManager:
         return secrets.token_urlsafe(8).upper().replace("_", "").replace("-", "")[:8]
 
     def create_lobby(
-        self, host_id: int, max_players: int = 4, is_private: bool = False
+            self, host_id: int, max_players: int = 4, is_private: bool = False
     ) -> Dict[str, Any]:
         """Создание нового лобби"""
         try:
@@ -55,12 +57,13 @@ class LobbyManager:
                 "message": "Ошибка при создании лобби",
             }
 
-    def get_lobby_by_code(self, invite_code: str) -> Optional[Dict[str, Any]]:
+    def get_lobby_by_code(self, invite_code: str) -> Optional[LobbyDTO]:
         """Получение информации о лобби по коду приглашения"""
+        # TODO: сделать возвращаение только idшника, информацию о лобби надо узнавать только по id этого лобби
         self.db.cursor.execute(
             """
-            SELECT lobby_id, status, max_players, current_players,
-                    is_private, host_id, invite_code
+            SELECT lobby_id, status, created_at, max_players,
+                    current_players, is_private, host_id, invite_code
             FROM lobbies
             WHERE invite_code = ? AND status = 'waiting'
             """,
@@ -71,15 +74,17 @@ class LobbyManager:
         if not row:
             return None
 
-        lobby = {
-            "lobby_id": row[0],
-            "status": row[1],
-            "max_players": row[2],
-            "current_players": row[3],
-            "is_private": row[4],
-            "host_id": row[5],
-            "invite_code": row[6],
-        }
+        lobby = LobbyDTO(**dict(
+            zip([
+                "lobby_id",
+                "status",
+                "created_at",
+                "max_players",
+                "current_players",
+                "is_private",
+                "host_id",
+                "invite_code"
+            ], row)))
 
         return lobby
 
@@ -95,7 +100,7 @@ class LobbyManager:
                 }
 
             # Проверка приватности и пароля
-            if lobby["is_private"]:
+            if lobby.is_private:
                 ...
                 # TODO
 
@@ -105,14 +110,14 @@ class LobbyManager:
                 SELECT user_id FROM lobby_players
                 WHERE lobby_id = ? AND user_id = ?
                 """,
-                (lobby["lobby_id"], user_id),
+                (lobby.lobby_id, user_id),
             )
 
             if self.db.cursor.fetchone():
                 return {"success": False, "message": "Вы уже находитесь в этом лобби"}
 
             # Проверяем количество игроков
-            if lobby["current_players"] >= lobby["max_players"]:
+            if lobby.current_players >= lobby.max_players:
                 return {"success": False, "message": "Лобби заполнено"}
 
             # Добавляем игрока в лобби
@@ -121,7 +126,7 @@ class LobbyManager:
                 INSERT INTO lobby_players (lobby_id, user_id)
                 VALUES (?, ?)
                 """,
-                (lobby["lobby_id"], user_id),
+                (lobby.lobby_id, user_id),
             )
 
             # Обновляем счетчик игроков
@@ -131,14 +136,14 @@ class LobbyManager:
                 SET current_players = current_players + 1
                 WHERE lobby_id = ?
                 """,
-                (lobby["lobby_id"],),
+                (lobby.lobby_id,),
             )
 
             self.db._connection.commit()
 
             return {
                 "success": True,
-                "lobby_id": lobby["lobby_id"],
+                "lobby_id": lobby.lobby_id,
                 "message": "Вы успешно присоединились к лобби",
             }
 
@@ -150,7 +155,7 @@ class LobbyManager:
                 "message": "Ошибка при присоединении к лобби",
             }
 
-    def get_lobby_info(self, lobby_id: int) -> Dict[str, Any]:
+    def get_lobby_info(self, lobby_id: int) -> Optional[LobbyDTO]:
         """Получение полной информации о лобби"""
         # Информация о лобби
         self.db.cursor.execute(
@@ -168,16 +173,17 @@ class LobbyManager:
         if not row:
             return None
 
-        lobby = {
-            "lobby_id": row[0],
-            "status": row[1],
-            "created_at": row[2],
-            "max_players": row[3],
-            "current_players": row[4],
-            "is_private": row[5],
-            "host_id": row[6],
-            "invite_code": row[7],
-        }
+        lobby = LobbyDTO(**dict(
+            zip([
+                "lobby_id",
+                "status",
+                "created_at",
+                "max_players",
+                "current_players",
+                "is_private",
+                "host_id",
+                "invite_code"
+            ], row)))
 
         # Список игроков
         self.db.cursor.execute(
@@ -200,7 +206,7 @@ class LobbyManager:
                 }
             )
 
-        lobby["players"] = players
+        lobby.players = players
         return lobby
 
     def leave_lobby(self, user_id: int, lobby_id: int) -> Dict[str, Any]:

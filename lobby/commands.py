@@ -86,9 +86,9 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         message_text = (
             f"✅ Лобби успешно создано!\n\n"
-            f"🆔 ID лобби: {lobby_info['lobby_id']}\n"
-            f"🔑 Код приглашения: <code>{lobby_info['invite_code']}</code>\n"
-            f"👥 Игроков: {lobby_info['current_players']}/{lobby_info['max_players']}\n"
+            f"🆔 ID лобби: {lobby_info.lobby_id}\n"
+            f"🔑 Код приглашения: <code>{lobby_info.invite_code}</code>\n"
+            f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
             f"👑 Хост: Вы\n\n"
             f"Поделитесь кодом приглашения с друзьями!"
         )
@@ -150,16 +150,16 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
         # Формируем список игроков
         players_list = "\n".join(
             [
-                f"👤 {await get_username_from_id(lobby_info["players"][i]["user_id"])}"
-                for i in range(len(lobby_info["players"]))
+                f"👤 {await get_username_from_id(lobby_info.players[i]['user_id'])}"
+                for i in range(len(lobby_info.players))
             ]
         )
 
         message_text = (
             f"✅ Вы успешно присоединились к лобби!\n\n"
-            f"🆔 ID лобби: {lobby_info['lobby_id']}\n"
-            f"👥 Игроков: {lobby_info['current_players']}/{lobby_info['max_players']}\n"
-            f"👑 Хост: {'Вы' if lobby_info['host_id'] == user_id else 'Другой игрок'}\n\n"
+            f"🆔 ID лобби: {lobby_info.lobby_id}\n"
+            f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
+            f"👑 Хост: {'Вы' if lobby_info.host_id == user_id else 'Другой игрок'}\n\n"
             f"Список игроков:\n{players_list}"
         )
 
@@ -167,7 +167,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
             [
                 InlineKeyboardButton(
                     "📊 Информация о лобби",
-                    callback_data=f"info_{lobby_info['lobby_id']}",
+                    callback_data=f"info_{lobby_info.lobby_id}",
                 )
             ],
             [InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")],
@@ -224,29 +224,29 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Формируем сообщение
     players_list = "\n".join(
         [
-            f"{'👑 ' if player['user_id'] == lobby_info['host_id'] else '👤 '}"
-            f"{await get_username_from_id(player["user_id"])}"
-            for i, player in enumerate(lobby_info["players"])
+            f"{'👑 ' if player['user_id'] == lobby_info.host_id else '👤 '}"
+            f"{await get_username_from_id(player['user_id'])}"
+            for i, player in enumerate(lobby_info.players)
         ]
     )
 
     message_text = (
         f"🏠 Ваше лобби:\n\n"
-        f"🆔 ID: {lobby_info['lobby_id']}\n"
-        f"🔑 Код: <code>{lobby_info["invite_code"]}</code>\n"
-        f"📊 Статус: {lobby_info['status']}\n"
-        f"👥 Игроков: {lobby_info['current_players']}/{lobby_info['max_players']}\n\n"
+        f"🆔 ID: {lobby_info.lobby_id}\n"
+        f"🔑 Код: <code>{lobby_info.invite_code}</code>\n"
+        f"📊 Статус: {lobby_info.status}\n"
+        f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n\n"
         f"Список игроков:\n{players_list}"
     )
 
     keyboard = []
 
     # Если пользователь хост, добавляем кнопку начала игры
-    if lobby_info["host_id"] == user_id:
+    if lobby_info.host_id == user_id:
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "🎮 Начать игру", callback_data=f"start_{lobby_info['lobby_id']}"
+                    "🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}"
                 )
             ]
         )
@@ -258,7 +258,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             #    callback_data=f"copy_code_{lobby_info['invite_code']}",
             # ),
             InlineKeyboardButton(
-                "🚪 Выйти", callback_data=f"leave_{lobby_info['lobby_id']}"
+                "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
             ),
         ]
     )
@@ -347,8 +347,7 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_game(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int, user_id: int
-):
+        update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало игры"""
     query = update.callback_query
     await query.answer()
@@ -374,12 +373,12 @@ async def start_game(
             await context.bot.send_message(
                 chat_id=first_player,
                 text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
-                "Примеры вопросов:\n"
-                "• «Мой персонаж человек?»\n"
-                "• «Мой персонаж из фильма?»\n"
-                "• «Мой персонаж умеет летать?»\n\n"
-                "Для финальной догадки задайте вопрос в формате:\n"
-                "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
+                     "Примеры вопросов:\n"
+                     "• «Мой персонаж человек?»\n"
+                     "• «Мой персонаж из фильма?»\n"
+                     "• «Мой персонаж умеет летать?»\n\n"
+                     "Для финальной догадки задайте вопрос в формате:\n"
+                     "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
             )
 
             # Уведомляем всех, что игра началась
@@ -388,8 +387,8 @@ async def start_game(
                     await context.bot.send_message(
                         chat_id=player_id,
                         text="🎮 Игра началась!\n"
-                        f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
-                        "Ожидайте вопросов и голосуйте!",
+                             f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
+                             "Ожидайте вопросов и голосуйте!",
                     )
 
             await query.edit_message_text(
