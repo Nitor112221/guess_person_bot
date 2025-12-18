@@ -89,7 +89,7 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(message_text, reply_markup=reply_markup)
     else:
-        logger.error(f"Error: {result['error']} Message: {result['message']}")
+        logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
             f"❌ Ошибка при создании лобби:\n{result['message']}\n\n"
             "Попробуйте еще раз.",
@@ -124,7 +124,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if result["success"]:
         lobby_info = lobby_manager.get_lobby_info(result["lobby_id"])
-
+        # TODO: изменить id на имена
         # Формируем список игроков
         players_list = "\n".join(
             [f"👤 Игрок {i+1}" for i in range(len(lobby_info["players"]))]
@@ -151,7 +151,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(message_text, reply_markup=reply_markup)
     else:
-        logger.error(f"Error: {result['error']} Message: {result['message']}")
+        logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await update.message.reply_text(
             f"❌ {result['message']}\n\n" "Попробуйте ввести код еще раз:",
             reply_markup=InlineKeyboardMarkup(
@@ -195,7 +195,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Получаем полную информацию о лобби
     lobby_info = lobby_manager.get_lobby_info(lobby_data[0])
-
+    # TODO: изменить id на имена
     # Формируем сообщение
     players_list = "\n".join(
         [
@@ -310,7 +310,7 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
         )
     else:
-        logger.error(f"Error: {result['error']} Message: {result['message']}")
+        logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
             f"❌ Ошибка: {result['message']}",
             reply_markup=InlineKeyboardMarkup(
@@ -325,6 +325,7 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     # Извлекаем lobby_id из callback_data
+    # TODO: баг, сюда всегда прилетает start_game
     lobby_id = int(query.data.split("_")[-1])
     user_id = update.effective_user.id
 
@@ -346,7 +347,7 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
         )
     else:
-        logger.error(f"Error: {result['error']} Message: {result['message']}")
+        logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
             f"❌ {result['message']}",
             reply_markup=InlineKeyboardMarkup(

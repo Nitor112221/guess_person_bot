@@ -102,7 +102,7 @@ class LobbyManager:
             # Проверяем, не присоединен ли уже пользователь
             self.db.cursor.execute(
                 """
-                SELECT player_id FROM lobby_players 
+                SELECT user_id FROM lobby_players 
                 WHERE lobby_id = ? AND user_id = ?
                 """,
                 (lobby["lobby_id"], user_id),
