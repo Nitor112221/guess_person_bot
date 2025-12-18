@@ -44,6 +44,7 @@ def main() -> None:
     # application.add_handler(CommandHandler("my_lobby", my_lobby_info))
 
     # ConversationHandler для управления лобби
+    # TODO: (в последнюю очередь), сделать весь процесс в диалоге
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lobby", lobby_menu)],
         states={

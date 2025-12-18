@@ -354,3 +354,7 @@ class LobbyManager:
                 "error": str(e),
                 "message": "Ошибка при начале игры",
             }
+
+    def get_lobby_by_used_id(self, user_id: int):
+        # TODO: требуется реализация
+        pass

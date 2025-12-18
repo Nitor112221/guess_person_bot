@@ -318,16 +318,39 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
         )
 
-
-async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало игры"""
+async def start_game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Извлекаем lobby_id из callback_data
-    # TODO: баг, сюда всегда прилетает start_game
     lobby_id = int(query.data.split("_")[-1])
     user_id = update.effective_user.id
+
+    await start_game(update, context, lobby_id, user_id)
+
+
+async def start_game_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    lobby_id = lobby_manager.get_lobby_by_used_id(user_id)
+    if not lobby_id:
+        logger.error(f"Error: None Message: Пользователь не состоит в лобби")
+        await query.edit_message_text(
+            f"❌ Вы не состоите в лобби",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return None
+
+    await start_game(update, context, lobby_id, user_id)
+    return None
+
+
+async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE,  lobby_id: int, user_id: int):
+    """Начало игры"""
+    query = update.callback_query
 
     # Пытаемся начать игру
     result = lobby_manager.start_game(lobby_id, user_id)
@@ -391,8 +414,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "leave_lobby":
         await leave_lobby(update, context)
         return None
-    elif data.startswith("start_"):
-        await start_game(update, context)
+    elif data == "start_game":
+        await start_game_button(update, context)
+        return None
+    elif data.startswith('start_'):
+        await start_game_callback(update, context)
         return None
     elif data.startswith("leave_"):
         await leave_lobby(update, context)
