@@ -13,8 +13,8 @@ from telegram.ext import (
     ConversationHandler,
 )
 
-from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
-from config import PLAYER_TURN, WAITING_VOTE, PROCESSING_VOTE, FINAL_GUESS
+from config import SELECTING_ACTION, JOINING_LOBBY
+from config import PLAYER_TURN, WAITING_VOTE
 from database_manager import DatabaseManager
 from game.game_logic import GameManager
 from handlers.base_command import cancel, start, help_command
@@ -66,20 +66,25 @@ def main() -> None:
 
     # ConversationHandler для игрового процесса
     game_conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question)],
+        entry_points=[
+            MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question)
+        ],
         states={
             PLAYER_TURN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question),
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND, game_manager.ask_question
+                ),
             ],
             WAITING_VOTE: [
-                CallbackQueryHandler(lambda update, context: game_manager.process_vote(
-                    update, context,
-                    int(update.callback_query.data.split('_')[2]),
-                    update.callback_query.data.split('_')[1]
-                ), pattern="^vote_(yes|no)_"),
-            ],
-            FINAL_GUESS: [
-                # Обработка финальных догадок
+                CallbackQueryHandler(
+                    lambda update, context: game_manager.process_vote(
+                        update,
+                        context,
+                        int(update.callback_query.data.split('_')[2]),
+                        update.callback_query.data.split('_')[1],
+                    ),
+                    pattern="^vote_(yes|no)_",
+                ),
             ],
         },
         fallbacks=[

@@ -49,7 +49,6 @@ async def lobby_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Выйти из лобби", callback_data="leave_lobby"),
         ],
         [
-            InlineKeyboardButton("Начать игру", callback_data="start_game"),
             InlineKeyboardButton("Информация", callback_data="lobby_info"),
         ],
     ]
@@ -96,19 +95,21 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Кнопка для копирования кода
         keyboard = [
-            #[
+            # [
             #    InlineKeyboardButton(
             #        "📋 Копировать код",
             #        callback_data=f"copy_code_{lobby_info['invite_code']}",
             #    ),
-            #],
+            # ],
             [
                 InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu"),
             ],
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode="HTML")
+        await query.edit_message_text(
+            message_text, reply_markup=reply_markup, parse_mode="HTML"
+        )
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
@@ -148,7 +149,10 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
         # TODO: изменить id на имена
         # Формируем список игроков
         players_list = "\n".join(
-            [f"👤 {await get_username_from_id(lobby_info["players"][i]["user_id"])}" for i in range(len(lobby_info["players"]))]
+            [
+                f"👤 {await get_username_from_id(lobby_info["players"][i]["user_id"])}"
+                for i in range(len(lobby_info["players"]))
+            ]
         )
 
         message_text = (
@@ -249,10 +253,10 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard.append(
         [
-            #InlineKeyboardButton(
+            # InlineKeyboardButton(
             #    "📋 Копировать код",
             #    callback_data=f"copy_code_{lobby_info['invite_code']}",
-            #),
+            # ),
             InlineKeyboardButton(
                 "🚪 Выйти", callback_data=f"leave_{lobby_info['lobby_id']}"
             ),
@@ -262,7 +266,9 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode="HTML")
+    await query.edit_message_text(
+        message_text, reply_markup=reply_markup, parse_mode="HTML"
+    )
 
 
 async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -339,39 +345,16 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
         )
 
-async def start_game_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def start_game(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int, user_id: int
+):
+    """Начало игры"""
     query = update.callback_query
     await query.answer()
 
     lobby_id = int(query.data.split("_")[-1])
     user_id = update.effective_user.id
-
-    await start_game(update, context, lobby_id, user_id)
-
-
-async def start_game_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    user_id = update.effective_user.id
-    lobby_id = lobby_manager.get_lobby_by_used_id(user_id)
-    if not lobby_id:
-        logger.error(f"Error: None Message: Пользователь не состоит в лобби")
-        await query.edit_message_text(
-            f"❌ Вы не состоите в лобби",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
-            ),
-        )
-        return None
-
-    await start_game(update, context, lobby_id, user_id)
-    return None
-
-
-async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int, user_id: int):
-    """Начало игры"""
-    query = update.callback_query
 
     # Пытаемся начать игру
     result = lobby_manager.start_game(lobby_id, user_id)
@@ -391,12 +374,12 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_i
             await context.bot.send_message(
                 chat_id=first_player,
                 text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
-                     "Примеры вопросов:\n"
-                     "• «Мой персонаж человек?»\n"
-                     "• «Мой персонаж из фильма?»\n"
-                     "• «Мой персонаж умеет летать?»\n\n"
-                     "Для финальной догадки задайте вопрос в формате:\n"
-                     "«Я [предполагаемый персонаж]?»"
+                "Примеры вопросов:\n"
+                "• «Мой персонаж человек?»\n"
+                "• «Мой персонаж из фильма?»\n"
+                "• «Мой персонаж умеет летать?»\n\n"
+                "Для финальной догадки задайте вопрос в формате:\n"
+                "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
             )
 
             # Уведомляем всех, что игра началась
@@ -405,13 +388,12 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_i
                     await context.bot.send_message(
                         chat_id=player_id,
                         text="🎮 Игра началась!\n"
-                             f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
-                             "Ожидайте вопросов и голосуйте!"
+                        f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
+                        "Ожидайте вопросов и голосуйте!",
                     )
 
             await query.edit_message_text(
-                "🎮 Игра началась!\n"
-                "Роли распределены. Первый игрок задает вопрос.",
+                "🎮 Игра началась!\n" "Роли распределены. Первый игрок задает вопрос.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
                 ),
@@ -449,11 +431,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "leave_lobby":
         await leave_lobby(update, context)
         return None
-    elif data == "start_game":
-        await start_game_button(update, context)
-        return None
     elif data.startswith('start_'):
-        await start_game_callback(update, context)
+        await start_game(update, context)
         return None
     elif data.startswith("leave_"):
         await leave_lobby(update, context)

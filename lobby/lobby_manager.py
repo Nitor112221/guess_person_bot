@@ -19,8 +19,8 @@ class LobbyManager:
 
             self.db.cursor.execute(
                 """
-                INSERT INTO lobbies 
-                (status, max_players, is_private, 
+                INSERT INTO lobbies
+                (status, max_players, is_private,
                     host_id, invite_code)
                 VALUES (?, ?, ?, ?, ?)
                 """,
@@ -59,9 +59,9 @@ class LobbyManager:
         """Получение информации о лобби по коду приглашения"""
         self.db.cursor.execute(
             """
-            SELECT lobby_id, status, max_players, current_players, 
+            SELECT lobby_id, status, max_players, current_players,
                     is_private, host_id, invite_code
-            FROM lobbies 
+            FROM lobbies
             WHERE invite_code = ? AND status = 'waiting'
             """,
             (invite_code,),
@@ -102,7 +102,7 @@ class LobbyManager:
             # Проверяем, не присоединен ли уже пользователь
             self.db.cursor.execute(
                 """
-                SELECT user_id FROM lobby_players 
+                SELECT user_id FROM lobby_players
                 WHERE lobby_id = ? AND user_id = ?
                 """,
                 (lobby["lobby_id"], user_id),
@@ -127,8 +127,8 @@ class LobbyManager:
             # Обновляем счетчик игроков
             self.db.cursor.execute(
                 """
-                UPDATE lobbies 
-                SET current_players = current_players + 1 
+                UPDATE lobbies
+                SET current_players = current_players + 1
                 WHERE lobby_id = ?
                 """,
                 (lobby["lobby_id"],),
@@ -155,10 +155,10 @@ class LobbyManager:
         # Информация о лобби
         self.db.cursor.execute(
             """
-            SELECT lobby_id, status, created_at, max_players, 
+            SELECT lobby_id, status, created_at, max_players,
                     current_players, is_private, host_id,
                     invite_code
-            FROM lobbies 
+            FROM lobbies
             WHERE lobby_id = ?
             """,
             (lobby_id,),
@@ -183,7 +183,7 @@ class LobbyManager:
         self.db.cursor.execute(
             """
             SELECT user_id, joined_at, player_character
-            FROM lobby_players 
+            FROM lobby_players
             WHERE lobby_id = ?
             ORDER BY joined_at
             """,
@@ -209,7 +209,7 @@ class LobbyManager:
             # Удаляем игрока из лобби
             self.db.cursor.execute(
                 """
-                DELETE FROM lobby_players 
+                DELETE FROM lobby_players
                 WHERE lobby_id = ? AND user_id = ?
                 """,
                 (lobby_id, user_id),
@@ -221,8 +221,8 @@ class LobbyManager:
             # Обновляем счетчик игроков
             self.db.cursor.execute(
                 """
-                UPDATE lobbies 
-                SET current_players = current_players - 1 
+                UPDATE lobbies
+                SET current_players = current_players - 1
                 WHERE lobby_id = ?
                 """,
                 (lobby_id,),
@@ -257,9 +257,9 @@ class LobbyManager:
                     # Находим первого игрока в качестве нового хоста
                     self.db.cursor.execute(
                         """
-                        SELECT user_id FROM lobby_players 
-                        WHERE lobby_id = ? 
-                        ORDER BY joined_at 
+                        SELECT user_id FROM lobby_players
+                        WHERE lobby_id = ?
+                        ORDER BY joined_at
                         LIMIT 1
                         """,
                         (lobby_id,),
@@ -270,8 +270,8 @@ class LobbyManager:
                         # Обновляем хост в таблице лобби
                         self.db.cursor.execute(
                             """
-                            UPDATE lobbies 
-                            SET host_id = ? 
+                            UPDATE lobbies
+                            SET host_id = ?
                             WHERE lobby_id = ?
                             """,
                             (new_host[0], lobby_id),
@@ -322,8 +322,8 @@ class LobbyManager:
             # Меняем статус лобби
             self.db.cursor.execute(
                 """
-                UPDATE lobbies 
-                SET status = 'playing' 
+                UPDATE lobbies
+                SET status = 'playing'
                 WHERE lobby_id = ?
                 """,
                 (lobby_id,),

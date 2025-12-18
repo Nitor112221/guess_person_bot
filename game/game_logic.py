@@ -5,16 +5,17 @@ import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, ConversationHandler
 
-from config import PLAYER_TURN, WAITING_VOTE, PROCESSING_VOTE, FINAL_GUESS
+from config import PLAYER_TURN, WAITING_VOTE
 import database_manager
 
 logger = logging.getLogger(__name__)
+
 
 class GameManager(metaclass=database_manager.SingletonMeta):
     def __init__(self, db_manager=None):
         if not hasattr(self, "initialized"):
             self.db = db_manager
-            self.active_games = dict() # lobby_id -> game_state
+            self.active_games = dict()  # lobby_id -> game_state
             self.initialized = True
 
     def load_roles(self) -> List[str]:
@@ -26,8 +27,12 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         except FileNotFoundError:
             logger.error("Файл roles.json не найден")
             return [
-                "Гарри Поттер", "Шерлок Холмс", "Супермен",
-                "Человек-паук", "Бэтмен", "Джеймс Бонд"
+                "Гарри Поттер",
+                "Шерлок Холмс",
+                "Супермен",
+                "Человек-паук",
+                "Бэтмен",
+                "Джеймс Бонд",
             ]
         except json.JSONDecodeError:
             logger.error("Ошибка чтения roles.json")
@@ -38,7 +43,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         all_roles = self.load_roles()
 
         if len(all_roles) < num_players:
-            logger.warning(f"Недостаточно ролей. Нужно {num_players}, есть {len(all_roles)}")
+            logger.warning(
+                f"Недостаточно ролей. Нужно {num_players}, есть {len(all_roles)}"
+            )
             # Дублируем роли если недостаточно
             all_roles = all_roles * (num_players // len(all_roles) + 1)
 
@@ -65,11 +72,11 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 # TODO: вынести запрос в менеджер
                 self.db.cursor.execute(
                     """
-                    UPDATE lobby_players 
-                    SET player_character = ? 
+                    UPDATE lobby_players
+                    SET player_character = ?
                     WHERE lobby_id = ? AND user_id = ?
                     """,
-                    (roles[i], lobby_id, player_id)
+                    (roles[i], lobby_id, player_id),
                 )
             roles = dict(zip(player_ids, roles))
             logger.info(str(roles))
@@ -82,7 +89,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 'question_count': 0,
                 'votes': {},
                 'game_started': True,
-                'questions_history': []
+                'questions_history': [],
             }
 
             self.active_games[lobby_id] = game_state
@@ -91,7 +98,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             return {
                 "success": True,
                 "message": "Игра началась",
-                "game_state": game_state
+                "game_state": game_state,
             }
 
         except Exception as e:
@@ -103,10 +110,10 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         self.db.cursor.execute(
             """
             SELECT lobby_id, status, current_players, host_id
-            FROM lobbies 
+            FROM lobbies
             WHERE lobby_id = ?
             """,
-            (lobby_id,)
+            (lobby_id,),
         )
 
         row = self.db.cursor.fetchone()
@@ -124,24 +131,28 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         self.db.cursor.execute(
             """
             SELECT user_id, player_character
-            FROM lobby_players 
+            FROM lobby_players
             WHERE lobby_id = ?
             ORDER BY joined_at
             """,
-            (lobby_id,)
+            (lobby_id,),
         )
 
         players = []
         for player_row in self.db.cursor.fetchall():
-            players.append({
-                "user_id": player_row[0],
-                "player_character": player_row[1],
-            })
+            players.append(
+                {
+                    "user_id": player_row[0],
+                    "player_character": player_row[1],
+                }
+            )
 
         lobby["players"] = players
         return lobby
 
-    async def send_roles_to_players(self, context: ContextTypes.DEFAULT_TYPE, lobby_id: int):
+    async def send_roles_to_players(
+        self, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
+    ):
         """Рассылает роли игрокам"""
         if lobby_id not in self.active_games:
             return
@@ -153,27 +164,28 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             other_players_roles = []
             for other_id, role in game_state['roles'].items():
                 if other_id != player_id:
-                    other_players_roles.append(f"Игрок {await self.get_username_from_id(context, other_id)}: {role}")
+                    other_players_roles.append(
+                        f"Игрок {await self.get_username_from_id(context, other_id)}: {role}"
+                    )
 
             # Создаем сообщение для игрока
             message_text = (
-                    "🎮 Игра началась!\n\n"
-                    "📋 Роли других игроков:\n" +
-                    "\n".join(other_players_roles) +
-                    "\n\n❓ Ваша роль скрыта от вас!\n"
-                    "Задавайте вопросы, чтобы угадать, кто вы!"
+                "🎮 Игра началась!\n\n"
+                "📋 Роли других игроков:\n"
+                + "\n".join(other_players_roles)
+                + "\n\n❓ Ваша роль скрыта от вас!\n"
+                "Задавайте вопросы, чтобы угадать, кто вы!"
             )
 
             # Отправляем сообщение
             try:
-                await context.bot.send_message(
-                    chat_id=player_id,
-                    text=message_text
-                )
+                await context.bot.send_message(chat_id=player_id, text=message_text)
             except Exception as e:
                 logger.error(f"Не удалось отправить сообщение игроку {player_id}: {e}")
 
-    async def get_username_from_id(self, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> str:
+    async def get_username_from_id(
+        self, context: ContextTypes.DEFAULT_TYPE, user_id: int
+    ) -> str:
         """Получает username по ID"""
         try:
             # Попробуем получить из контекста бота
@@ -195,7 +207,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         """Передает ход следующему игроку"""
         if lobby_id in self.active_games:
             game_state = self.active_games[lobby_id]
-            game_state['current_player_index'] = (game_state['current_player_index'] + 1) % len(game_state['players'])
+            game_state['current_player_index'] = (
+                game_state['current_player_index'] + 1
+            ) % len(game_state['players'])
             game_state['votes'] = {}
             game_state['question_count'] = 0
 
@@ -210,16 +224,16 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 current_player = self.get_current_player(lobby_id)
                 if current_player != user_id:
                     await update.message.reply_text("Сейчас не ваш ход!")
-                    return
+                    return None
 
                 question = update.message.text.strip()
 
                 # Проверяем, не является ли вопрос финальной догадкой
                 if question.lower().startswith("я ") and "!" == question[-1]:
                     # Это финальная догадка
-                    game_state['final_guess'] = question
-                    await self.process_final_guess(update, context, lobby_id, user_id, question)
-                    return FINAL_GUESS
+                    return await self.process_final_guess(
+                        update, context, lobby_id, user_id, question
+                    )
 
                 # Обычный вопрос
                 game_state['current_question'] = question
@@ -233,8 +247,13 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         await update.message.reply_text("Вы не в активной игре!")
         return ConversationHandler.END
 
-    async def send_vote_question(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                                 lobby_id: int, question: str):
+    async def send_vote_question(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        question: str,
+    ):
         """Рассылает вопрос для голосования"""
         game_state = self.active_games[lobby_id]
         asking_player = self.get_current_player(lobby_id)
@@ -243,7 +262,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         keyboard = [
             [
                 InlineKeyboardButton("✅ Да", callback_data=f"vote_yes_{lobby_id}"),
-                InlineKeyboardButton("❌ Нет", callback_data=f"vote_no_{lobby_id}")
+                InlineKeyboardButton("❌ Нет", callback_data=f"vote_no_{lobby_id}"),
             ]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -255,21 +274,25 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                     await context.bot.send_message(
                         chat_id=player_id,
                         text=f"❓ Вопрос от {await self.get_username_from_id(context, asking_player)}:\n\n"
-                             f"«{question}»\n\n"
-                             f"Ответьте на вопрос с точки зрения ВАШЕГО персонажа.",
-                        reply_markup=reply_markup
+                        f"«{question}»\n\n"
+                        f"Ответьте на вопрос с точки зрения ВАШЕГО персонажа.",
+                        reply_markup=reply_markup,
                     )
                 except Exception as e:
                     logger.error(f"Не удалось отправить вопрос игроку {player_id}: {e}")
 
         # Уведомляем спрашивающего
         await update.message.reply_text(
-            f"✅ Ваш вопрос отправлен другим игрокам!\n"
-            f"Ждем ответов..."
+            "✅ Ваш вопрос отправлен другим игрокам!\n" f"Ждем ответов..."
         )
 
-    async def process_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                           lobby_id: int, vote: str):
+    async def process_vote(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        vote: str,
+    ):
         """Обработка голоса"""
         query = update.callback_query
         await query.answer()
@@ -290,7 +313,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         # Записываем голос
         game_state['votes'][user_id] = vote
 
-        await query.edit_message_text(f"✅ Ваш голос: {'Да' if vote == 'yes' else 'Нет'}")
+        await query.edit_message_text(
+            f"✅ Ваш голос: {'Да' if vote == 'yes' else 'Нет'}"
+        )
 
         # Проверяем, все ли проголосовали
         total_players = len(game_state['players']) - 1  # минус спрашивающий
@@ -298,8 +323,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             # Все проголосовали, подсчитываем результаты
             await self.announce_results(update, context, lobby_id)
 
-    async def announce_results(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                               lobby_id: int):
+    async def announce_results(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
+    ):
         """Объявляет результаты голосования"""
         game_state = self.active_games[lobby_id]
 
@@ -325,7 +351,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             current_player = self.get_current_player(lobby_id)
             await context.bot.send_message(
                 chat_id=current_player,
-                text=result_text + "\n\nЗадайте следующий вопрос:"
+                text=result_text + "\n\nЗадайте следующий вопрос:",
             )
 
             # Уведомляем других игроков
@@ -333,7 +359,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 if player_id != current_player:
                     await context.bot.send_message(
                         chat_id=player_id,
-                        text=result_text + "\n\nОжидаем следующий вопрос..."
+                        text=result_text + "\n\nОжидаем следующий вопрос...",
                     )
 
             return PLAYER_TURN
@@ -350,19 +376,25 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             for player_id in game_state['players']:
                 await context.bot.send_message(
                     chat_id=player_id,
-                    text=result_text + f"\n\nСледующий ход: {await self.get_username_from_id(context, next_player)}"
+                    text=result_text
+                    + f"\n\nСледующий ход: {await self.get_username_from_id(context, next_player)}",
                 )
 
             # Просим следующего игрока задать вопрос
             await context.bot.send_message(
-                chat_id=next_player,
-                text="🎮 Ваш ход! Задайте вопрос:"
+                chat_id=next_player, text="🎮 Ваш ход! Задайте вопрос:"
             )
 
             return PLAYER_TURN
 
-    async def process_final_guess(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                                  lobby_id: int, user_id: int, guess: str):
+    async def process_final_guess(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        user_id: int,
+        guess: str,
+    ):
         """Обработка финальной догадки"""
         game_state = self.active_games[lobby_id]
 
@@ -372,7 +404,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         if guess_text.lower() == actual_role.lower():
             # Игрок угадал!
-            await self.end_game(update, context, lobby_id, user_id, True)
+            return await self.end_game(update, context, lobby_id, user_id, True)
         else:
             # Игрок не угадал
             result_text = (
@@ -389,17 +421,23 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             for player_id in game_state['players']:
                 await context.bot.send_message(
                     chat_id=player_id,
-                    text=result_text + f"\n\nСледующий ход: {await self.get_username_from_id(context, next_player)}"
+                    text=result_text
+                    + f"\n\nСледующий ход: {await self.get_username_from_id(context, next_player)}",
                 )
 
             # Просим следующего игрока задать вопрос
             await context.bot.send_message(
-                chat_id=next_player,
-                text="🎮 Ваш ход! Задайте вопрос:"
+                chat_id=next_player, text="🎮 Ваш ход! Задайте вопрос:"
             )
 
-    async def end_game(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                       lobby_id: int, winner_id: int, guessed: bool):
+    async def end_game(
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        winner_id: int,
+        guessed: bool,
+    ):
         """Завершение игры"""
         game_state = self.active_games[lobby_id]
 
@@ -424,29 +462,26 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         # Рассылаем сообщение о завершении
         for player_id in game_state['players']:
-            await context.bot.send_message(
-                chat_id=player_id,
-                text=end_message
-            )
+            await context.bot.send_message(chat_id=player_id, text=end_message)
 
         # Возвращаем лобби в состояние ожидания
         self.db.cursor.execute(
             """
-            UPDATE lobbies 
-            SET status = 'waiting' 
+            UPDATE lobbies
+            SET status = 'waiting'
             WHERE lobby_id = ?
             """,
-            (lobby_id,)
+            (lobby_id,),
         )
 
         # Очищаем роли у игроков
         self.db.cursor.execute(
             """
-            UPDATE lobby_players 
-            SET player_character = '' 
+            UPDATE lobby_players
+            SET player_character = ''
             WHERE lobby_id = ?
             """,
-            (lobby_id,)
+            (lobby_id,),
         )
 
         # Удаляем состояние игры
