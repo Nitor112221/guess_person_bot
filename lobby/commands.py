@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 # Инициализация базы данных
 db_manager = DatabaseManager()
 lobby_manager = LobbyManager(db_manager)
+from telegram import Bot
+from telegram.error import TelegramError
+import os
+from dotenv import load_dotenv
+
+
+load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN")
+bot = Bot(token=os.getenv("BOT_TOKEN"))
+
+
+async def get_username_from_id(user_id: int):
+    try:
+        # Получаем информацию о чате по ID
+        chat = await bot.get_chat(user_id)
+        # Проверяем, есть ли у пользователя username
+        return f"@{chat.username}"
+    except TelegramError as e:
+        return f"Ошибка при получении данных: {e}"
 
 
 async def lobby_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -67,7 +86,7 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text = (
             f"✅ Лобби успешно создано!\n\n"
             f"🆔 ID лобби: {lobby_info['lobby_id']}\n"
-            f"🔑 Код приглашения: {lobby_info['invite_code']}\n"
+            f"🔑 Код приглашения: <code>{lobby_info['invite_code']}</code>\n"
             f"👥 Игроков: {lobby_info['current_players']}/{lobby_info['max_players']}\n"
             f"👑 Хост: Вы\n\n"
             f"Поделитесь кодом приглашения с друзьями!"
@@ -75,19 +94,19 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Кнопка для копирования кода
         keyboard = [
-            [
-                InlineKeyboardButton(
-                    "📋 Копировать код",
-                    callback_data=f"copy_code_{lobby_info['invite_code']}",
-                ),
-            ],
+            #[
+            #    InlineKeyboardButton(
+            #        "📋 Копировать код",
+            #        callback_data=f"copy_code_{lobby_info['invite_code']}",
+            #    ),
+            #],
             [
                 InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu"),
             ],
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(message_text, reply_markup=reply_markup)
+        await query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode="HTML")
     else:
         logger.error(f"Error: {result['error']} Message: {result['message']}")
         await query.edit_message_text(
@@ -127,7 +146,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         # Формируем список игроков
         players_list = "\n".join(
-            [f"👤 Игрок {i+1}" for i in range(len(lobby_info["players"]))]
+            [f"👤 {await get_username_from_id(lobby_info["players"][i]["user_id"])}" for i in range(len(lobby_info["players"]))]
         )
 
         message_text = (
@@ -200,7 +219,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     players_list = "\n".join(
         [
             f"{'👑 ' if player['user_id'] == lobby_info['host_id'] else '👤 '}"
-            f"Игрок {i+1}"
+            f"{await get_username_from_id(player["user_id"])}"
             for i, player in enumerate(lobby_info["players"])
         ]
     )
@@ -208,7 +227,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_text = (
         f"🏠 Ваше лобби:\n\n"
         f"🆔 ID: {lobby_info['lobby_id']}\n"
-        f"🔑 Код: {lobby_info['invite_code']}\n"
+        f"🔑 Код: <code>{lobby_info["invite_code"]}</code>\n"
         f"📊 Статус: {lobby_info['status']}\n"
         f"👥 Игроков: {lobby_info['current_players']}/{lobby_info['max_players']}\n\n"
         f"Список игроков:\n{players_list}"
@@ -228,10 +247,10 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard.append(
         [
-            InlineKeyboardButton(
-                "📋 Копировать код",
-                callback_data=f"copy_code_{lobby_info['invite_code']}",
-            ),
+            #InlineKeyboardButton(
+            #    "📋 Копировать код",
+            #    callback_data=f"copy_code_{lobby_info['invite_code']}",
+            #),
             InlineKeyboardButton(
                 "🚪 Выйти", callback_data=f"leave_{lobby_info['lobby_id']}"
             ),
@@ -241,7 +260,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text(message_text, reply_markup=reply_markup)
+    await query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode="HTML")
 
 
 async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -355,23 +374,6 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# TODO убрать, перенести в my_lobby_info
-async def copy_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Копирование кода приглашения"""
-    query = update.callback_query
-    await query.answer()
-
-    # Извлекаем код из callback_data
-    invite_code = query.data.split("_")[-1]
-
-    await query.edit_message_text(
-        f"🔑 Код приглашения:\n`{invite_code}`\n\n"
-        "Код скопирован! Поделитесь им с друзьями.",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("↩️ Назад", callback_data="back_to_menu")]]
-        ),
-    )
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -398,9 +400,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
     elif data.startswith("confirm_leave_"):
         await confirm_leave(update, context)
-        return None
-    elif data.startswith("copy_code_"):
-        await copy_invite_code(update, context)
         return None
     elif data.startswith("info_"):
         # TODO: Показать детальную информацию о лобби
