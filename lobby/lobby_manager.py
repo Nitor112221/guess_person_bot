@@ -83,7 +83,33 @@ class LobbyManager:
 
         return lobby
 
-    def join_lobby(self, user_id: int, invite_code: str) -> Dict[str, Any]:
+    def get_user_lobby(self, user_id: int) -> Optional[int]:
+        """Получить ID лобби, в котором находится пользователь"""
+        try:
+            # Ищем лобби пользователя
+            self.db.cursor.execute(
+                """
+                SELECT l.lobby_id 
+                FROM lobbies l
+                JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
+                WHERE lp.user_id = ? AND l.status = 'waiting'
+                """,
+                (user_id,),
+            )
+
+            lobby_data = self.db.cursor.fetchone()
+
+            if not lobby_data:
+                return None
+
+            return lobby_data[0]
+
+        except Exception as e:
+            print(f"Error getting user lobby: {e}")
+            return None
+
+
+    def  join_lobby(self, user_id: int, invite_code: str) -> Dict[str, Any]:
         """Присоединение к лобби по коду"""
         try:
             # Получаем информацию о лобби
@@ -202,6 +228,9 @@ class LobbyManager:
 
         lobby["players"] = players
         return lobby
+
+
+
 
     def leave_lobby(self, user_id: int, lobby_id: int) -> Dict[str, Any]:
         """Выход из лобби"""
