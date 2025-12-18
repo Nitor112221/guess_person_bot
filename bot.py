@@ -1,17 +1,22 @@
-from dotenv import load_dotenv
+import logging
 import os
 from typing import Optional
 
+from dotenv import load_dotenv
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     filters,
+    ConversationHandler,
 )
 
-from handlers.base_command import start
-from lobby.commands import *
+from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
+from database_manager import DatabaseManager
+from handlers.base_command import cancel, start, help_command
+from lobby.commands import button_callback, process_invite_code, lobby_menu
 
 load_dotenv()
 # Берем из переменных окружения (безопасно!)
@@ -34,10 +39,9 @@ def main() -> None:
     DatabaseManager()
 
     application = Application.builder().token(BOT_TOKEN).build()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("my_lobby", my_lobby_info))
+    # application.add_handler(CommandHandler("my_lobby", my_lobby_info))
 
     # ConversationHandler для управления лобби
     conv_handler = ConversationHandler(
