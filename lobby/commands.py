@@ -1,8 +1,14 @@
 import logging
+import os
+
+from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
+from telegram import Bot
+from telegram.error import TelegramError
 
 from database_manager import DatabaseManager
+from game.game_logic import GameManager
 from lobby.lobby_manager import LobbyManager
 from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
 
@@ -14,11 +20,7 @@ logger = logging.getLogger(__name__)
 # Инициализация базы данных
 db_manager = DatabaseManager()
 lobby_manager = LobbyManager(db_manager)
-from telegram import Bot
-from telegram.error import TelegramError
-import os
-from dotenv import load_dotenv
-
+game_manager = GameManager(db_manager)
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -188,7 +190,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-
+    # TODO: Для хоста не обновляется
     # Ищем лобби, в котором находится пользователь
     db_manager.cursor.execute(
         """
@@ -367,7 +369,7 @@ async def start_game_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return None
 
 
-async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE,  lobby_id: int, user_id: int):
+async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int, user_id: int):
     """Начало игры"""
     query = update.callback_query
 
@@ -375,19 +377,52 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE,  lobby_
     result = lobby_manager.start_game(lobby_id, user_id)
 
     if result["success"]:
-        # TODO: Здесь будет логика запуска игры
-        # 1. Генерация игрового поля
-        # 2. Раздача карт/ролей
-        # 3. Уведомление всех игроков
-        # 4. Переход к игровому процессу
+        # Запускаем игровую сессию
+        game_result = game_manager.start_game_session(lobby_id)
 
-        await query.edit_message_text(
-            "🎮 Игра началась!\n\n"
-            "Игровой процесс будет реализован в будущих обновлениях.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
-            ),
-        )
+        if game_result["success"]:
+            # Рассылаем роли игрокам
+            await game_manager.send_roles_to_players(context, lobby_id)
+
+            # Устанавливаем состояние игры для первого игрока
+            first_player = game_manager.get_current_player(lobby_id)
+
+            # Отправляем сообщение первому игроку
+            await context.bot.send_message(
+                chat_id=first_player,
+                text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
+                     "Примеры вопросов:\n"
+                     "• «Мой персонаж человек?»\n"
+                     "• «Мой персонаж из фильма?»\n"
+                     "• «Мой персонаж умеет летать?»\n\n"
+                     "Для финальной догадки задайте вопрос в формате:\n"
+                     "«Я [предполагаемый персонаж]?»"
+            )
+
+            # Уведомляем всех, что игра началась
+            for player_id in game_manager.active_games[lobby_id]['players']:
+                if player_id != first_player:
+                    await context.bot.send_message(
+                        chat_id=player_id,
+                        text="🎮 Игра началась!\n"
+                             f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
+                             "Ожидайте вопросов и голосуйте!"
+                    )
+
+            await query.edit_message_text(
+                "🎮 Игра началась!\n"
+                "Роли распределены. Первый игрок задает вопрос.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
+        else:
+            await query.edit_message_text(
+                f"❌ Ошибка начала игры: {game_result['message']}",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
@@ -396,8 +431,6 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE,  lobby_
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
-
-
 
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -427,6 +460,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
     elif data.startswith("confirm_leave_"):
         await confirm_leave(update, context)
+        return None
+    elif data.startswith("vote_"):
+        # Обработка голосования в игре
+        parts = data.split("_")
+        if len(parts) == 3:
+            vote_type = parts[1]  # yes или no
+            lobby_id = int(parts[2])
+            await game_manager.process_vote(update, context, lobby_id, vote_type)
         return None
     elif data.startswith("info_"):
         # TODO: Показать детальную информацию о лобби
