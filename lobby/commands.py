@@ -1,7 +1,4 @@
 import logging
-import os
-
-from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Bot
@@ -73,7 +70,18 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # TODO: запретить создавать лобби, если игрок уже состоит в лобби
+    # Проверяем, не находится ли пользователь уже в лобби
+    current_lobby_id = lobby_manager.get_user_lobby(user_id)
+    if current_lobby_id:
+        await query.edit_message_text(
+            f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
+            "Пожалуйста, покиньте текущее лобби перед созданием нового.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
+
     # Создаем лобби (публичное по умолчанию)
     result = lobby_manager.create_lobby(
         host_id=user_id,
@@ -122,6 +130,19 @@ async def join_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Присоединение к лобби"""
     query = update.callback_query
     await query.answer()
+    user_id = update.effective_user.id
+
+    # Проверяем, не находится ли пользователь уже в лобби
+    current_lobby_id = lobby_manager.get_user_lobby(user_id)
+    if current_lobby_id:
+        await query.edit_message_text(
+            f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
+            "Пожалуйста, покиньте текущее лобби перед присоединением к другому.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
 
     await query.edit_message_text(
         "Введите код приглашения лобби:",
@@ -143,6 +164,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if result["success"]:
         lobby_info = lobby_manager.get_lobby_info(result["lobby_id"])
+        # TODO: изменить id на имена
         # Формируем список игроков
         players_list = "\n".join(
             [
@@ -185,21 +207,10 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # Ищем лобби, в котором находится пользователь
-    db_manager.cursor.execute(
-        """
-        SELECT l.lobby_id, l.status, l.current_players, l.max_players,
-               l.invite_code, l.host_id
-        FROM lobbies l
-        JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
-        WHERE lp.user_id = ? AND l.status = 'waiting'
-        """,
-        (user_id,),
-    )
+    # Находим лобби пользователя - ВЫНЕСЕНО В LobbyManager
+    lobby_id = lobby_manager.get_user_lobby(user_id)
 
-    lobby_data = db_manager.cursor.fetchone()
-
-    if not lobby_data:
+    if not lobby_id:
         await query.edit_message_text(
             "Вы не находитесь ни в одном активном лобби.",
             reply_markup=InlineKeyboardMarkup(
@@ -209,7 +220,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Получаем полную информацию о лобби
-    lobby_info = lobby_manager.get_lobby_info(lobby_data[0])
+    lobby_info = lobby_manager.get_lobby_info(lobby_id)
     # Формируем сообщение
     players_list = "\n".join(
         [
@@ -259,11 +270,11 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выход из лобби"""
+    #TODO: надо удалять пользователя из игры,если игра активна
     query = update.callback_query
     await query.answer()
 
     user_id = update.effective_user.id
-
     lobby_id = lobby_manager.get_user_lobby(user_id)
 
     if not lobby_id:
@@ -395,24 +406,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "create_lobby":
         await create_lobby(update, context)
-        return None
     elif data == "join_lobby":
         return await join_lobby(update, context)
     elif data == "my_lobby":
         await my_lobby_info(update, context)
-        return None
     elif data == "leave_lobby":
         await leave_lobby(update, context)
-        return None
     elif data.startswith('start_'):
         await start_game(update, context)
-        return None
     elif data.startswith("leave_"):
         await leave_lobby(update, context)
-        return None
     elif data.startswith("confirm_leave_"):
         await confirm_leave(update, context)
-        return None
     elif data.startswith("vote_"):
         # Обработка голосования в игре
         parts = data.split("_")
@@ -420,13 +425,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             vote_type = parts[1]  # yes или no
             lobby_id = int(parts[2])
             await game_manager.process_vote(update, context, lobby_id, vote_type)
-        return None
     elif data.startswith("info_"):
         # TODO: Показать детальную информацию о лобби
         await query.answer("Функция в разработке", show_alert=True)
-        return None
     elif data == "back_to_menu":
         return await lobby_menu(update, context)
+    elif data == "lobby_info":
+        await my_lobby_info(update, context)
     else:
         await query.answer("Неизвестная команда")
-        return None
+
+    return ConversationHandler.END

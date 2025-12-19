@@ -302,13 +302,13 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         if not game_state:
             await query.edit_message_text("Игра не найдена!")
-            return
+            return None
 
         # Проверяем, что это не спрашивающий игрок
         current_player = self.get_current_player(lobby_id)
         if user_id == current_player:
             await query.edit_message_text("Вы не можете голосовать на свой вопрос!")
-            return
+            return None
 
         # Записываем голос
         game_state['votes'][user_id] = vote
@@ -321,7 +321,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         total_players = len(game_state['players']) - 1  # минус спрашивающий
         if len(game_state['votes']) == total_players:
             # Все проголосовали, подсчитываем результаты
-            await self.announce_results(update, context, lobby_id)
+            return await self.announce_results(update, context, lobby_id)
+
+        return None
 
     async def announce_results(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
@@ -404,7 +406,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         if guess_text.lower() == actual_role.lower():
             # Игрок угадал!
-            return await self.end_game(update, context, lobby_id, user_id, True)
+            return  await self.end_game(update, context, lobby_id, user_id, True)
         else:
             # Игрок не угадал
             result_text = (
@@ -429,6 +431,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             await context.bot.send_message(
                 chat_id=next_player, text="🎮 Ваш ход! Задайте вопрос:"
             )
+            return None
 
     async def end_game(
         self,

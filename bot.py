@@ -43,12 +43,23 @@ def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    # application.add_handler(CommandHandler("my_lobby", my_lobby_info))
+    application.add_handler(CommandHandler("lobby", lobby_menu))
 
+    # Callback для игрового цикла
+    application.add_handler(
+        CallbackQueryHandler(
+            lambda update, context: game_manager.process_vote(
+                update,
+                context,
+                int(update.callback_query.data.split('_')[2]),
+                update.callback_query.data.split('_')[1],
+            ),
+            pattern="^vote_(yes|no)_",
+        )
+    )
     # ConversationHandler для управления лобби
-    # TODO: (в последнюю очередь), сделать весь процесс в диалоге
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("lobby", lobby_menu)],
+        entry_points=[CallbackQueryHandler(button_callback)],
         states={
             SELECTING_ACTION: [CallbackQueryHandler(button_callback)],
             JOINING_LOBBY: [
@@ -61,41 +72,10 @@ def main() -> None:
             CallbackQueryHandler(button_callback),
         ],
     )
-
     application.add_handler(conv_handler)
 
-    # ConversationHandler для игрового процесса
-    game_conv_handler = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question)
-        ],
-        states={
-            PLAYER_TURN: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND, game_manager.ask_question
-                ),
-            ],
-            WAITING_VOTE: [
-                CallbackQueryHandler(
-                    lambda update, context: game_manager.process_vote(
-                        update,
-                        context,
-                        int(update.callback_query.data.split('_')[2]),
-                        update.callback_query.data.split('_')[1],
-                    ),
-                    pattern="^vote_(yes|no)_",
-                ),
-            ],
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel),
-        ],
-    )
-
-    application.add_handler(game_conv_handler)
-
-    # Обработчики callback кнопок вне ConversationHandler
-    application.add_handler(CallbackQueryHandler(button_callback))
+    # Обработчик вопросов во время игры
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question))
 
     # Запускаем бота
     application.run_polling(allowed_updates=Update.ALL_TYPES)
