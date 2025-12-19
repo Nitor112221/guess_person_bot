@@ -1,11 +1,10 @@
 import json
 import random
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes
 
-from config import PLAYER_TURN, WAITING_VOTE
 import database_manager
 
 logger = logging.getLogger(__name__)
@@ -105,7 +104,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             logger.error(f"Ошибка начала игры: {e}")
             return {"success": False, "message": f"Ошибка начала игры: {str(e)}"}
 
-    def get_lobby_info(self, lobby_id: int) -> Dict[str, Any]:
+    def get_lobby_info(self, lobby_id: int) -> Optional[Dict[str, Any]]:
         """Получение информации о лобби"""
         self.db.cursor.execute(
             """
@@ -194,7 +193,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         except:
             return f"Игрок {user_id}"
 
-    def get_current_player(self, lobby_id: int) -> int:
+    def get_current_player(self, lobby_id: int) -> Optional[int]:
         """Получает ID текущего игрока"""
         if lobby_id in self.active_games:
             game_state = self.active_games[lobby_id]
@@ -224,16 +223,16 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 current_player = self.get_current_player(lobby_id)
                 if current_player != user_id:
                     await update.message.reply_text("Сейчас не ваш ход!")
-                    return None
 
                 question = update.message.text.strip()
 
                 # Проверяем, не является ли вопрос финальной догадкой
                 if question.lower().startswith("я ") and "!" == question[-1]:
                     # Это финальная догадка
-                    return await self.process_final_guess(
+                    await self.process_final_guess(
                         update, context, lobby_id, user_id, question
                     )
+                    return
 
                 # Обычный вопрос
                 game_state['current_question'] = question
@@ -242,10 +241,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 # Рассылаем вопрос другим игрокам для голосования
                 await self.send_vote_question(update, context, lobby_id, question)
 
-                return WAITING_VOTE
-
         await update.message.reply_text("Вы не в активной игре!")
-        return ConversationHandler.END
 
     async def send_vote_question(
         self,
@@ -302,13 +298,13 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         if not game_state:
             await query.edit_message_text("Игра не найдена!")
-            return None
+            return
 
         # Проверяем, что это не спрашивающий игрок
         current_player = self.get_current_player(lobby_id)
         if user_id == current_player:
             await query.edit_message_text("Вы не можете голосовать на свой вопрос!")
-            return None
+            return
 
         # Записываем голос
         game_state['votes'][user_id] = vote
@@ -321,9 +317,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         total_players = len(game_state['players']) - 1  # минус спрашивающий
         if len(game_state['votes']) == total_players:
             # Все проголосовали, подсчитываем результаты
-            return await self.announce_results(update, context, lobby_id)
-
-        return None
+            await self.announce_results(update, context, lobby_id)
 
     async def announce_results(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
@@ -363,9 +357,6 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                         chat_id=player_id,
                         text=result_text + "\n\nОжидаем следующий вопрос...",
                     )
-
-            return PLAYER_TURN
-
         else:
             result_text += "\n❌ Большинство ответило НЕТ!"
             result_text += "\nХод переходит следующему игроку."
@@ -387,8 +378,6 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 chat_id=next_player, text="🎮 Ваш ход! Задайте вопрос:"
             )
 
-            return PLAYER_TURN
-
     async def process_final_guess(
         self,
         update: Update,
@@ -401,37 +390,37 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         game_state = self.active_games[lobby_id]
 
         # Извлекаем предполагаемого персонажа из вопроса
-        guess_text = guess.lower().replace("я ", "").replace("!", "").strip()
+        guess_text = guess.strip()[2:][:-1]
         actual_role = game_state['roles'][user_id]
 
         if guess_text.lower() == actual_role.lower():
             # Игрок угадал!
-            return  await self.end_game(update, context, lobby_id, user_id, True)
-        else:
-            # Игрок не угадал
-            result_text = (
-                f"❌ {await self.get_username_from_id(context, user_id)}, вы не угадали!\n"
-                f"Вы не {guess_text}.\n\n"
-                f"Ход переходит следующему игроку."
-            )
+            await self.end_game(update, context, lobby_id, user_id, True)
+            return
 
-            # Передаем ход следующему игроку
-            self.next_player(lobby_id)
-            next_player = self.get_current_player(lobby_id)
+        # Игрок не угадал
+        result_text = (
+            f"❌ {await self.get_username_from_id(context, user_id)}, вы не угадали!\n"
+            f"Вы не {guess_text}.\n\n"
+            f"Ход переходит следующему игроку."
+        )
 
-            # Рассылаем результаты
-            for player_id in game_state['players']:
-                await context.bot.send_message(
-                    chat_id=player_id,
-                    text=result_text
-                    + f"\n\nСледующий ход: {await self.get_username_from_id(context, next_player)}",
-                )
+        # Передаем ход следующему игроку
+        self.next_player(lobby_id)
+        next_player = self.get_current_player(lobby_id)
 
-            # Просим следующего игрока задать вопрос
+        # Рассылаем результаты
+        for player_id in game_state['players']:
             await context.bot.send_message(
-                chat_id=next_player, text="🎮 Ваш ход! Задайте вопрос:"
+                chat_id=player_id,
+                text=result_text
+                + f"\n\nСледующий ход: {await self.get_username_from_id(context, next_player)}",
             )
-            return None
+
+        # Просим следующего игрока задать вопрос
+        await context.bot.send_message(
+            chat_id=next_player, text="🎮 Ваш ход! Задайте вопрос:"
+        )
 
     async def end_game(
         self,
@@ -492,5 +481,3 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             del self.active_games[lobby_id]
 
         self.db._connection.commit()
-
-        return ConversationHandler.END
