@@ -248,15 +248,21 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         return ConversationHandler.END
 
     async def send_vote_question(
-        self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
-        lobby_id: int,
-        question: str,
+            self,
+            update: Update,
+            context: ContextTypes.DEFAULT_TYPE,
+            lobby_id: int,
+            question: str,
     ):
         """Рассылает вопрос для голосования"""
         game_state = self.active_games[lobby_id]
         asking_player = self.get_current_player(lobby_id)
+
+        # Получаем имя персонажа спрашивающего игрока
+        asking_player_character_name = game_state['roles'][asking_player]
+
+        # Получаем username спрашивающего
+        asking_player_username = await self.get_username_from_id(context, asking_player)
 
         # Создаем клавиатуру для голосования
         keyboard = [
@@ -273,9 +279,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 try:
                     await context.bot.send_message(
                         chat_id=player_id,
-                        text=f"❓ Вопрос от {await self.get_username_from_id(context, asking_player)}:\n\n"
-                        f"«{question}»\n\n"
-                        f"Ответьте на вопрос с точки зрения ВАШЕГО персонажа.",
+                        text=f"❓ Вопрос от {asking_player_username}:\n\n"
+                             f"«{question}»\n\n"
+                             f"Ответьте на вопрос о персонаже {asking_player_character_name}.",
                         reply_markup=reply_markup,
                     )
                 except Exception as e:
@@ -283,8 +289,10 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         # Уведомляем спрашивающего
         await update.message.reply_text(
-            "✅ Ваш вопрос отправлен другим игрокам!\n" f"Ждем ответов..."
+            "✅ Ваш вопрос отправлен другим игрокам!\n"
+            f"Ждем ответов..."
         )
+
 
     async def process_vote(
         self,
