@@ -49,7 +49,7 @@ async def lobby_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Выйти из лобби", callback_data="leave_lobby"),
         ],
         [
-            InlineKeyboardButton("Информация", callback_data="lobby_info"),
+            InlineKeyboardButton("Начать игру", callback_data="start_game"),
         ],
     ]
 
@@ -95,15 +95,12 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Кнопка для копирования кода
         keyboard = [
-            # [
-            #    InlineKeyboardButton(
-            #        "📋 Копировать код",
-            #        callback_data=f"copy_code_{lobby_info['invite_code']}",
-            #    ),
-            # ],
             [
                 InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu"),
             ],
+            [
+                InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby"),
+            ]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -158,18 +155,13 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ Вы успешно присоединились к лобби!\n\n"
             f"🆔 ID лобби: {lobby_info.lobby_id}\n"
             f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
-            f"👑 Хост: {'Вы' if lobby_info.host_id == user_id else 'Другой игрок'}\n\n"
+            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n\n"
             f"Список игроков:\n{players_list}"
         )
 
         keyboard = [
-            [
-                InlineKeyboardButton(
-                    "📊 Информация о лобби",
-                    callback_data=f"info_{lobby_info.lobby_id}",
-                )
-            ],
             [InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")],
+            [InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")]
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -250,10 +242,6 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard.append(
         [
-            # InlineKeyboardButton(
-            #    "📋 Копировать код",
-            #    callback_data=f"copy_code_{lobby_info['invite_code']}",
-            # ),
             InlineKeyboardButton(
                 "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
             ),
@@ -261,6 +249,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
+    keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
@@ -438,9 +427,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return None
     elif data == "back_to_menu":
         return await lobby_menu(update, context)
-    elif data == "lobby_info":
-        await my_lobby_info(update, context)
-        return None
     else:
         await query.answer("Неизвестная команда")
         return None
