@@ -155,7 +155,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ Вы успешно присоединились к лобби!\n\n"
             f"🆔 ID лобби: {lobby_info.lobby_id}\n"
             f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
-            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)
+            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n"
             f"Список игроков:\n{players_list}"
         )
 
