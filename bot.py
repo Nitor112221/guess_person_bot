@@ -14,7 +14,6 @@ from telegram.ext import (
 )
 
 from config import SELECTING_ACTION, JOINING_LOBBY
-from config import PLAYER_TURN, WAITING_VOTE
 from database_manager import DatabaseManager
 from game.game_logic import GameManager
 from handlers.base_command import cancel, start, help_command
@@ -75,7 +74,9 @@ def main() -> None:
     application.add_handler(conv_handler)
 
     # Обработчик вопросов во время игры
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question))
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question)
+    )
 
     # Запускаем бота
     application.run_polling(allowed_updates=Update.ALL_TYPES)

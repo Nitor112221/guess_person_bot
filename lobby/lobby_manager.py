@@ -13,7 +13,7 @@ class LobbyManager:
         return secrets.token_urlsafe(8).upper().replace("_", "").replace("-", "")[:8]
 
     def create_lobby(
-            self, host_id: int, max_players: int = 4, is_private: bool = False
+        self, host_id: int, max_players: int = 4, is_private: bool = False
     ) -> Dict[str, Any]:
         """Создание нового лобби"""
         try:
@@ -74,17 +74,23 @@ class LobbyManager:
         if not row:
             return None
 
-        lobby = LobbyDTO(**dict(
-            zip([
-                "lobby_id",
-                "status",
-                "created_at",
-                "max_players",
-                "current_players",
-                "is_private",
-                "host_id",
-                "invite_code"
-            ], row)))
+        lobby = LobbyDTO(
+            **dict(
+                zip(
+                    [
+                        "lobby_id",
+                        "status",
+                        "created_at",
+                        "max_players",
+                        "current_players",
+                        "is_private",
+                        "host_id",
+                        "invite_code",
+                    ],
+                    row,
+                )
+            )
+        )
 
         return lobby
 
@@ -94,10 +100,10 @@ class LobbyManager:
             # Ищем лобби пользователя
             self.db.cursor.execute(
                 """
-                SELECT l.lobby_id 
+                SELECT l.lobby_id
                 FROM lobbies l
                 JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
-                WHERE lp.user_id = ? 
+                WHERE lp.user_id = ?
                 """,
                 (user_id,),
             )
@@ -111,7 +117,6 @@ class LobbyManager:
 
         except:
             return None
-
 
     def join_lobby(self, user_id: int, invite_code: str) -> Dict[str, Any]:
         """Присоединение к лобби по коду"""
@@ -198,17 +203,23 @@ class LobbyManager:
         if not row:
             return None
 
-        lobby = LobbyDTO(**dict(
-            zip([
-                "lobby_id",
-                "status",
-                "created_at",
-                "max_players",
-                "current_players",
-                "is_private",
-                "host_id",
-                "invite_code"
-            ], row)))
+        lobby = LobbyDTO(
+            **dict(
+                zip(
+                    [
+                        "lobby_id",
+                        "status",
+                        "created_at",
+                        "max_players",
+                        "current_players",
+                        "is_private",
+                        "host_id",
+                        "invite_code",
+                    ],
+                    row,
+                )
+            )
+        )
 
         # Список игроков
         self.db.cursor.execute(
