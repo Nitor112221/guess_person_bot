@@ -146,7 +146,6 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if result["success"]:
         lobby_info = lobby_manager.get_lobby_info(result["lobby_id"])
-        # TODO: изменить id на имена
         # Формируем список игроков
         players_list = "\n".join(
             [
@@ -194,7 +193,6 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # TODO: Для хоста не обновляется
     # Ищем лобби, в котором находится пользователь
     db_manager.cursor.execute(
         """
@@ -220,7 +218,6 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Получаем полную информацию о лобби
     lobby_info = lobby_manager.get_lobby_info(lobby_data[0])
-    # TODO: изменить id на имена
     # Формируем сообщение
     players_list = "\n".join(
         [
@@ -278,19 +275,9 @@ async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
-    # Находим лобби пользователя TODO: вынести в lobby_manager
-    db_manager.cursor.execute(
-        """
-        SELECT l.lobby_id FROM lobbies l
-        JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
-        WHERE lp.user_id = ? AND l.status = 'waiting'
-        """,
-        (user_id,),
-    )
+    lobby_id = lobby_manager.get_user_lobby(user_id)
 
-    lobby_data = db_manager.cursor.fetchone()
-
-    if not lobby_data:
+    if not lobby_id:
         await query.edit_message_text(
             "Вы не находитесь ни в одном активном лобби.",
             reply_markup=InlineKeyboardMarkup(
@@ -298,8 +285,6 @@ async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ),
         )
         return
-
-    lobby_id = lobby_data[0]
 
     # Подтверждение выхода
     keyboard = [
