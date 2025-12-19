@@ -406,24 +406,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "create_lobby":
         await create_lobby(update, context)
-        return None
     elif data == "join_lobby":
         return await join_lobby(update, context)
     elif data == "my_lobby":
         await my_lobby_info(update, context)
-        return None
     elif data == "leave_lobby":
         await leave_lobby(update, context)
-        return None
     elif data.startswith('start_'):
         await start_game(update, context)
-        return None
     elif data.startswith("leave_"):
         await leave_lobby(update, context)
-        return None
     elif data.startswith("confirm_leave_"):
         await confirm_leave(update, context)
-        return None
     elif data.startswith("vote_"):
         # Обработка голосования в игре
         parts = data.split("_")
@@ -431,16 +425,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             vote_type = parts[1]  # yes или no
             lobby_id = int(parts[2])
             await game_manager.process_vote(update, context, lobby_id, vote_type)
-        return None
     elif data.startswith("info_"):
         # TODO: Показать детальную информацию о лобби
         await query.answer("Функция в разработке", show_alert=True)
-        return None
     elif data == "back_to_menu":
         return await lobby_menu(update, context)
     elif data == "lobby_info":
         await my_lobby_info(update, context)
-        return None
     else:
         await query.answer("Неизвестная команда")
-        return None
+
+    return ConversationHandler.END
