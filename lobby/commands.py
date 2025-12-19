@@ -1,9 +1,10 @@
-import logging
+from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Bot
 from telegram.error import TelegramError
-
+import logging
+import os
 from database_manager import DatabaseManager
 from game.game_logic import GameManager
 from lobby.lobby_manager import LobbyManager
