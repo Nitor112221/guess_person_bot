@@ -65,7 +65,7 @@ class LobbyManager:
             SELECT lobby_id, status, created_at, max_players,
                     current_players, is_private, host_id, invite_code
             FROM lobbies
-            WHERE invite_code = ? AND status = 'waiting'
+            WHERE invite_code = ?
             """,
             (invite_code,),
         )
@@ -97,7 +97,7 @@ class LobbyManager:
                 SELECT l.lobby_id 
                 FROM lobbies l
                 JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
-                WHERE lp.user_id = ? AND l.status = 'waiting'
+                WHERE lp.user_id = ? 
                 """,
                 (user_id,),
             )

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List, Dict, Any
 
 
 @dataclass
@@ -12,4 +12,4 @@ class LobbyDTO:
     is_private: bool
     host_id: int
     invite_code: str
-    players: List[Dict[str]] = field(default_factory=list)
+    players: List[Dict[str, Any]] = field(default_factory=list)
