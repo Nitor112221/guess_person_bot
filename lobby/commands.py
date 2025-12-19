@@ -73,7 +73,18 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # TODO: запретить создавать лобби, если игрок уже состоит в лобби
+    # Проверяем, не находится ли пользователь уже в лобби
+    current_lobby_id = lobby_manager.get_user_lobby(user_id)
+    if current_lobby_id:
+        await query.edit_message_text(
+            f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
+            "Пожалуйста, покиньте текущее лобби перед созданием нового.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
+
     # Создаем лобби (публичное по умолчанию)
     result = lobby_manager.create_lobby(
         host_id=user_id,
@@ -122,6 +133,19 @@ async def join_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Присоединение к лобби"""
     query = update.callback_query
     await query.answer()
+    user_id = update.effective_user.id
+
+    # Проверяем, не находится ли пользователь уже в лобби
+    current_lobby_id = lobby_manager.get_user_lobby(user_id)
+    if current_lobby_id:
+        await query.edit_message_text(
+            f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
+            "Пожалуйста, покиньте текущее лобби перед присоединением к другому.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
 
     await query.edit_message_text(
         "Введите код приглашения лобби:",
@@ -185,21 +209,10 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # Ищем лобби, в котором находится пользователь
-    db_manager.cursor.execute(
-        """
-        SELECT l.lobby_id, l.status, l.current_players, l.max_players,
-               l.invite_code, l.host_id
-        FROM lobbies l
-        JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
-        WHERE lp.user_id = ? AND l.status = 'waiting'
-        """,
-        (user_id,),
-    )
+    # Находим лобби пользователя - ВЫНЕСЕНО В LobbyManager
+    lobby_id = lobby_manager.get_user_lobby(user_id)
 
-    lobby_data = db_manager.cursor.fetchone()
-
-    if not lobby_data:
+    if not lobby_id:
         await query.edit_message_text(
             "Вы не находитесь ни в одном активном лобби.",
             reply_markup=InlineKeyboardMarkup(
@@ -209,7 +222,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Получаем полную информацию о лобби
-    lobby_info = lobby_manager.get_lobby_info(lobby_data[0])
+    lobby_info = lobby_manager.get_lobby_info(lobby_id)
     # Формируем сообщение
     players_list = "\n".join(
         [
@@ -259,11 +272,11 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выход из лобби"""
+    #TODO: надо удалять пользователя из игры,если игра активна
     query = update.callback_query
     await query.answer()
 
     user_id = update.effective_user.id
-
     lobby_id = lobby_manager.get_user_lobby(user_id)
 
     if not lobby_id:
