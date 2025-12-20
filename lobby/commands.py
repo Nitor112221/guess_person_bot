@@ -86,7 +86,7 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Создаем лобби (публичное по умолчанию)
     result = lobby_manager.create_lobby(
         host_id=user_id,
-        max_players=10,
+        max_players=15,
         is_private=False,  # TODO: Добавить выбор приватности
     )
 
