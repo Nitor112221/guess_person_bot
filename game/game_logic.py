@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 import database_manager
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,6 +17,167 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             self.db = db_manager
             self.active_games = dict()  # lobby_id -> game_state
             self.initialized = True
+
+    def prepare_player_exit(self, lobby_id: int, exiting_player_id: int) -> Dict[str, Any]:
+        """Подготовка к выходу игрока: сбор информации до удаления"""
+        if lobby_id not in self.active_games:
+            return {"has_game": False, "needs_cleanup": False}
+
+        game_state = self.active_games[lobby_id]
+        result = {
+            "has_game": True,
+            "was_current_player": False,
+            "had_voted": False,
+            "was_last_vote": False,
+            "remaining_players_count": len(game_state['players']) - 1,
+            "next_player": None
+        }
+
+        # Проверяем, был ли игрок текущим
+        current_player = self.get_current_player(lobby_id)
+        if current_player == exiting_player_id:
+            result["was_current_player"] = True
+            # Определяем следующего игрока ДО удаления
+            if len(game_state['players']) - 1:
+                # Находим индекс следующего игрока в оригинальном списке
+                current_idx = game_state['players'].index(exiting_player_id)
+                # Ищем следующего существующего игрока
+                next_idx = (current_idx + 1) % len(game_state['players'])
+                result["next_player"] = game_state['players'][next_idx]
+        else:
+            result["next_player"] = current_player
+
+        # Проверяем, голосовал ли игрок
+        if exiting_player_id in game_state.get('votes', {}):
+            result["had_voted"] = True
+        else:
+            # Проверяем, был ли это последний голос
+            total_voters = len(game_state['players']) - 1  # минус спрашивающий
+            if len(game_state['votes']) == total_voters - 1: # минус человек, который выходит
+                result["was_last_vote"] = True
+        logger.info(f"Prepare_Player_exit result: {result}")
+        return result
+
+    async def process_player_exit(
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            lobby_id: int,
+            exiting_player_id: int,
+            exit_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Обработка выхода игрока после сбора информации"""
+        if lobby_id not in self.active_games:
+            return {"end_game": False}
+
+        game_state = self.active_games[lobby_id]
+
+        # Удаляем игрока из структур
+        if exiting_player_id in game_state['players']:
+            game_state['players'].remove(exiting_player_id)
+
+        if exiting_player_id in game_state['roles']:
+            del game_state['roles'][exiting_player_id]
+
+        if exiting_player_id in game_state['votes']:
+            del game_state['votes'][exiting_player_id]
+
+        # Обрабатываем сценарии
+        result = {"end_game": False}
+
+        # 1. Если игрок был текущим
+        if exit_info.get("was_current_player"):
+            if exit_info.get("next_player"):
+                # Находим нового текущего игрока
+                if exit_info["next_player"] in game_state['players']:
+                    next_player_idx = game_state['players'].index(exit_info["next_player"])
+                    game_state['current_player_index'] = next_player_idx
+                    result["next_player"] = exit_info["next_player"]
+
+                    # Удаляем текущий вопрос
+                    if 'current_question' in game_state:
+                        del game_state['current_question']
+        else:
+            next_player_idx = game_state['players'].index(exit_info["next_player"])
+            game_state['current_player_index'] = next_player_idx
+            result["next_player"] = exit_info["next_player"]
+
+        logger.info(f"Game_state after was_current_player: {game_state}")
+        # 2. Проверяем, остался ли 1 игрок
+        if len(game_state['players']) == 1:
+            result["end_game"] = True
+            result["winner_id"] = game_state['players'][0]
+            result["winner_role"] = game_state['roles'].get(result["winner_id"])
+
+        # 3. Отправляем уведомления
+        await self.send_exit_notifications(
+            context, lobby_id, exiting_player_id, result, exit_info
+        )
+        if len(game_state['players']) - 1 == len(game_state['votes']):
+            await self.announce_results(context, lobby_id)
+        logger.info(f"Process_Player_exit result: {result}")
+        return result
+
+    async def send_exit_notifications(
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            lobby_id: int,
+            exiting_player_id: int,
+            game_result: Dict[str, Any],
+            exit_info: Dict[str, Any]
+    ):
+        """Отправка уведомлений о выходе игрока"""
+        if lobby_id not in self.active_games:
+            return
+
+        game_state = self.active_games[lobby_id]
+        exiting_player_name = await self.get_username_from_id(context, exiting_player_id)
+
+        notification_text = f"⚠️ {exiting_player_name} вышел из игры!\n\n"
+
+        # Если игра завершилась
+        if game_result.get("end_game"):
+            winner_id = game_result.get("winner_id")
+            if winner_id:
+                winner_name = await self.get_username_from_id(context, winner_id)
+                winner_role = game_result.get("winner_role", "Неизвестно")
+
+                notification_text += (
+                    f"🏆 Поздравляем! {winner_name} победил(а)!\n"
+                    f"🎭 Ваша роль была: {winner_role}\n"
+                    f"🎮 Игра завершена!"
+                )
+
+                # Раскрываем все роли
+                notification_text += "\n\n📋 Все роли:\n"
+                for player_id, role in game_state['roles'].items():
+                    player_name = await self.get_username_from_id(context, player_id)
+                    notification_text += f"{player_name}: {role}\n"
+        else:
+            # Игра продолжается
+            notification_text += f"👥 Осталось игроков: {len(game_state['players'])}\n"
+
+            # Если выходящий игрок был текущим
+            if exit_info.get("was_current_player"):
+                next_player = game_result.get("next_player")
+                if next_player:
+                    next_player_name = await self.get_username_from_id(context, next_player)
+                    notification_text += f"\n🎮 Следующий ход у: {next_player_name}"
+
+            # Если выходящий игрок голосовал
+            elif exit_info.get("had_voted"):
+                votes_count = len(game_state.get('votes', {}))
+                total_voters = len(game_state['players']) - 1
+                notification_text += f"\n🗳️ Проголосовало: {votes_count}/{total_voters}"
+
+        # Отправляем уведомление всем оставшимся игрокам
+        for player_id in game_state['players']:
+            try:
+                await context.bot.send_message(
+                    chat_id=player_id,
+                    text=notification_text
+                )
+            except Exception as e:
+                logger.error(f"Не удалось отправить уведомление игроку {player_id}: {e}")
 
     def load_roles(self) -> List[str]:
         """Загрузка ролей из файла"""
@@ -223,7 +385,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 current_player = self.get_current_player(lobby_id)
                 if current_player != user_id:
                     await update.message.reply_text("Сейчас не ваш ход!")
-
+                # TODO: если игрок уже задал вопрос и он находится на голосовании блокировать возможность задать новый вопрос
                 question = update.message.text.strip()
 
                 # Проверяем, не является ли вопрос финальной догадкой
@@ -240,6 +402,7 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
                 # Рассылаем вопрос другим игрокам для голосования
                 await self.send_vote_question(update, context, lobby_id, question)
+                return
 
         await update.message.reply_text("Вы не в активной игре!")
 
@@ -317,13 +480,15 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         total_players = len(game_state['players']) - 1  # минус спрашивающий
         if len(game_state['votes']) == total_players:
             # Все проголосовали, подсчитываем результаты
-            await self.announce_results(update, context, lobby_id)
+            await self.announce_results(context, lobby_id)
 
     async def announce_results(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
+        self, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
     ):
         """Объявляет результаты голосования"""
         game_state = self.active_games[lobby_id]
+        if "current_question" not in game_state:
+            return
 
         # Подсчитываем голоса
         yes_votes = sum(1 for vote in game_state['votes'].values() if vote == 'yes')

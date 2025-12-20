@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 # Инициализация базы данных
 db_manager = DatabaseManager()
-lobby_manager = LobbyManager(db_manager)
 game_manager = GameManager(db_manager)
+lobby_manager = LobbyManager(db_manager, game_manager)
+game_manager.lobby_manager = lobby_manager
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -47,9 +48,6 @@ async def lobby_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("Моё лобби", callback_data="my_lobby"),
             InlineKeyboardButton("Выйти из лобби", callback_data="leave_lobby"),
-        ],
-        [
-            InlineKeyboardButton("Начать игру", callback_data="start_game"),
         ],
     ]
 
@@ -88,7 +86,7 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Создаем лобби (публичное по умолчанию)
     result = lobby_manager.create_lobby(
         host_id=user_id,
-        max_players=4,  # TODO: Добавить выбор количества игроков через кнопки
+        max_players=10,  # TODO: Добавить выбор количества игроков через кнопки
         is_private=False,  # TODO: Добавить выбор приватности
     )
 
@@ -315,14 +313,27 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Выходим из лобби
     result = lobby_manager.leave_lobby(user_id, lobby_id)
-
+    logger.info(f"Leave_lobby_return result: {result}")
     if result["success"]:
-        await query.edit_message_text(
-            "✅ Вы вышли из лобби.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
-            ),
-        )
+        # Завершаем обработку выхода
+        if result.get("game_processing_result", {}).get("needs_processing"):
+            await lobby_manager.complete_player_exit(context, result)
+
+        # Проверяем, не завершилась ли игра
+        if result.get("remaining_players", 0) <= 1:
+            await query.edit_message_text(
+                "✅ Вы вышли из лобби. Игра завершена.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
+        else:
+            await query.edit_message_text(
+                "✅ Вы вышли из лобби.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
@@ -359,12 +370,12 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=first_player,
                 text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
-                "Примеры вопросов:\n"
-                "• «Мой персонаж человек?»\n"
-                "• «Мой персонаж из фильма?»\n"
-                "• «Мой персонаж умеет летать?»\n\n"
-                "Для финальной догадки задайте вопрос в формате:\n"
-                "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
+                     "Примеры вопросов:\n"
+                     "• «Мой персонаж человек?»\n"
+                     "• «Мой персонаж из фильма?»\n"
+                     "• «Мой персонаж умеет летать?»\n\n"
+                     "Для финальной догадки задайте вопрос в формате:\n"
+                     "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
             )
 
             # Уведомляем всех, что игра началась
@@ -373,8 +384,8 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await context.bot.send_message(
                         chat_id=player_id,
                         text="🎮 Игра началась!\n"
-                        f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
-                        "Ожидайте вопросов и голосуйте!",
+                             f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
+                             "Ожидайте вопросов и голосуйте!",
                     )
 
             await query.edit_message_text(
@@ -404,6 +415,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback кнопок"""
     query = update.callback_query
     data = query.data
+    logger.info(data)
 
     if data == "create_lobby":
         await create_lobby(update, context)
