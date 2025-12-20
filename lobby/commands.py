@@ -105,6 +105,12 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Кнопка для копирования кода
         keyboard = [
             [
+                InlineKeyboardButton("🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}")
+            ],
+            [
+                InlineKeyboardButton("🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}")
+            ],
+            [
                 InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu"),
             ],
             [
@@ -182,10 +188,12 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"Список игроков:\n{players_list}"
         )
 
-        keyboard = [
-            [InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")],
-            [InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")]
-        ]
+        keyboard = []
+        if lobby_info.host_id == user_id:
+            keyboard.append([InlineKeyboardButton("🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}")])
+        keyboard.append([InlineKeyboardButton("🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}")])
+        keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
+        keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(message_text, reply_markup=reply_markup)
