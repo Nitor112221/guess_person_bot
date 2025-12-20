@@ -1,12 +1,10 @@
-import logging
-import os
-
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Bot
 from telegram.error import TelegramError
-
+import logging
+import os
 from database_manager import DatabaseManager
 from game.game_logic import GameManager
 from lobby.lobby_manager import LobbyManager
@@ -16,7 +14,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
 # Инициализация базы данных
 db_manager = DatabaseManager()
 lobby_manager = LobbyManager(db_manager)
@@ -26,6 +23,7 @@ load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 
+refresh = dict()
 
 async def get_username_from_id(user_id: int):
     try:
@@ -167,6 +165,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if result["success"]:
         lobby_info = lobby_manager.get_lobby_info(result["lobby_id"])
+        # TODO: изменить id на имена
         # Формируем список игроков
         players_list = "\n".join(
             [
@@ -179,7 +178,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ Вы успешно присоединились к лобби!\n\n"
             f"🆔 ID лобби: {lobby_info.lobby_id}\n"
             f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
-            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n\n"
+            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n"
             f"Список игроков:\n{players_list}"
         )
 
@@ -240,6 +239,14 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n\n"
         f"Список игроков:\n{players_list}"
     )
+    if_edited_message_text = (
+        f"🏠 Ваше лобби:\n\n"
+        f"🆔 ID: {lobby_info.lobby_id}\n"
+        f"🔑 Код: {lobby_info.invite_code}\n"
+        f"📊 Статус: {lobby_info.status}\n"
+        f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n\n"
+        f"Список игроков:\n{players_list}"
+    )
 
     keyboard = []
 
@@ -263,6 +270,11 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
     keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
+
+
+    current_message_text = query.message.text
+    if current_message_text == if_edited_message_text:
+        return
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(
