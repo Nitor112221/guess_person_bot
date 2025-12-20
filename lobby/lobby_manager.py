@@ -1,19 +1,24 @@
+import logging
 import secrets
 from typing import Optional, Dict, Any
 
+from telegram.ext import ContextTypes
+
 from dto.lobby_dto import LobbyDTO
 
+logger = logging.getLogger(__name__)
 
 class LobbyManager:
-    def __init__(self, db_manager):
+    def __init__(self, db_manager, game_manager):
         self.db = db_manager
+        self.game_manager = game_manager
 
     def generate_invite_code(self) -> str:
         """Генерация уникального кода приглашения"""
         return secrets.token_urlsafe(8).upper().replace("_", "").replace("-", "")[:8]
 
     def create_lobby(
-            self, host_id: int, max_players: int = 4, is_private: bool = False
+            self, host_id: int, max_players: int = 10, is_private: bool = False
     ) -> Dict[str, Any]:
         """Создание нового лобби"""
         try:
@@ -74,17 +79,23 @@ class LobbyManager:
         if not row:
             return None
 
-        lobby = LobbyDTO(**dict(
-            zip([
-                "lobby_id",
-                "status",
-                "created_at",
-                "max_players",
-                "current_players",
-                "is_private",
-                "host_id",
-                "invite_code"
-            ], row)))
+        lobby = LobbyDTO(
+            **dict(
+                zip(
+                    [
+                        "lobby_id",
+                        "status",
+                        "created_at",
+                        "max_players",
+                        "current_players",
+                        "is_private",
+                        "host_id",
+                        "invite_code",
+                    ],
+                    row,
+                )
+            )
+        )
 
         return lobby
 
@@ -94,10 +105,10 @@ class LobbyManager:
             # Ищем лобби пользователя
             self.db.cursor.execute(
                 """
-                SELECT l.lobby_id 
+                SELECT l.lobby_id
                 FROM lobbies l
                 JOIN lobby_players lp ON l.lobby_id = lp.lobby_id
-                WHERE lp.user_id = ? 
+                WHERE lp.user_id = ?
                 """,
                 (user_id,),
             )
@@ -111,7 +122,6 @@ class LobbyManager:
 
         except:
             return None
-
 
     def join_lobby(self, user_id: int, invite_code: str) -> Dict[str, Any]:
         """Присоединение к лобби по коду"""
@@ -198,17 +208,23 @@ class LobbyManager:
         if not row:
             return None
 
-        lobby = LobbyDTO(**dict(
-            zip([
-                "lobby_id",
-                "status",
-                "created_at",
-                "max_players",
-                "current_players",
-                "is_private",
-                "host_id",
-                "invite_code"
-            ], row)))
+        lobby = LobbyDTO(
+            **dict(
+                zip(
+                    [
+                        "lobby_id",
+                        "status",
+                        "created_at",
+                        "max_players",
+                        "current_players",
+                        "is_private",
+                        "host_id",
+                        "invite_code",
+                    ],
+                    row,
+                )
+            )
+        )
 
         # Список игроков
         self.db.cursor.execute(
@@ -235,9 +251,17 @@ class LobbyManager:
         return lobby
 
     def leave_lobby(self, user_id: int, lobby_id: int) -> Dict[str, Any]:
-        """Выход из лобби"""
+        """Выход из лобби с корректной обработкой игровых состояний"""
         try:
-            # Удаляем игрока из лобби
+            # Шаг 1: Собираем информацию о состоянии игры ДО удаления
+            exit_info = None
+            game_processing_result = None
+
+            if self.game_manager:
+                # Получаем информацию о роли игрока в игре
+                exit_info = self.game_manager.prepare_player_exit(lobby_id, user_id)
+
+            # Шаг 2: Удаляем игрока из базы данных
             self.db.cursor.execute(
                 """
                 DELETE FROM lobby_players
@@ -249,7 +273,7 @@ class LobbyManager:
             if self.db.cursor.rowcount == 0:
                 return {"success": False, "message": "Игрок не найден в лобби"}
 
-            # Обновляем счетчик игроков
+            # Шаг 3: Обновляем счетчик игроков
             self.db.cursor.execute(
                 """
                 UPDATE lobbies
@@ -259,7 +283,7 @@ class LobbyManager:
                 (lobby_id,),
             )
 
-            # Проверяем, остались ли игроки в лобби
+            # Шаг 4: Получаем информацию об оставшихся игроках
             self.db.cursor.execute(
                 """
                 SELECT current_players FROM lobbies WHERE lobby_id = ?
@@ -269,13 +293,24 @@ class LobbyManager:
 
             remaining_players = self.db.cursor.fetchone()[0]
 
-            # Если лобби пустое, удаляем его
+            # Шаг 5: Обрабатываем игровое состояние ПОСЛЕ удаления из базы
+            if self.game_manager and exit_info and exit_info.get("has_game"):
+                # Здесь мы будем обрабатывать игровое состояние позже,
+                # через async метод, так как нужен context
+                game_processing_result = {
+                    "needs_processing": True,
+                    "exit_info": exit_info,
+                    "remaining_players": remaining_players
+                }
+
+            # Шаг 6: Обрабатываем состояние лобби
             if remaining_players == 0:
+                # Если лобби пустое, удаляем его
                 self.db.cursor.execute(
                     "DELETE FROM lobbies WHERE lobby_id = ?", (lobby_id,)
                 )
-            # Если вышел хост, назначаем нового хоста
             else:
+                # Если вышел хост, назначаем нового хоста
                 self.db.cursor.execute(
                     """
                     SELECT host_id FROM lobbies WHERE lobby_id = ?
@@ -310,7 +345,14 @@ class LobbyManager:
 
             self.db._connection.commit()
 
-            return {"success": True, "message": "Вы вышли из лобби"}
+            return {
+                "success": True,
+                "message": "Вы вышли из лобби",
+                "game_processing_result": game_processing_result,
+                "remaining_players": remaining_players,
+                "user_id": user_id,
+                "lobby_id": lobby_id
+            }
 
         except Exception as e:
             self.db._connection.rollback()
@@ -319,6 +361,61 @@ class LobbyManager:
                 "error": str(e),
                 "message": "Ошибка при выходе из лобби",
             }
+
+    async def complete_player_exit(
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            exit_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Завершение обработки выхода игрока (async часть)"""
+        if not exit_result.get("game_processing_result", {}).get("needs_processing"):
+            return {"processed": False}
+
+        processing_info = exit_result["game_processing_result"]
+        lobby_id = exit_result["lobby_id"]
+        user_id = exit_result["user_id"]
+
+        # Обрабатываем игровое состояние
+        game_result = await self.game_manager.process_player_exit(
+            context, lobby_id, user_id, processing_info["exit_info"]
+        )
+
+        # Если игра завершилась, обновляем статус лобби
+        if game_result.get("end_game"):
+            try:
+                self.db.cursor.execute(
+                    """
+                    UPDATE lobbies
+                    SET status = 'waiting'
+                    WHERE lobby_id = ?
+                    """,
+                    (lobby_id,),
+                )
+
+                # Очищаем роли у игроков
+                self.db.cursor.execute(
+                    """
+                    UPDATE lobby_players
+                    SET player_character = ''
+                    WHERE lobby_id = ?
+                    """,
+                    (lobby_id,),
+                )
+
+                self.db._connection.commit()
+
+                # Удаляем состояние игры
+                if lobby_id in self.game_manager.active_games:
+                    del self.game_manager.active_games[lobby_id]
+
+            except Exception as e:
+                logger.error(f"Ошибка при обновлении статуса лобби: {e}")
+
+        return {
+            "processed": True,
+            "game_result": game_result,
+            "notifications_sent": True
+        }
 
     def start_game(self, lobby_id: int, host_id: int) -> Dict[str, Any]:
         """Начало игры"""
@@ -363,20 +460,6 @@ class LobbyManager:
             self.db._connection.commit()
 
             return {"success": True, "message": "Игра начата"}
-
-        except Exception as e:
-            self.db._connection.rollback()
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "Ошибка при начале игры",
-            }
-
-    def end_game(self, lobby_id: int) -> Dict[str, Any]:
-        """Завершение игры"""
-        try:
-            ...
-            # TODO
 
         except Exception as e:
             self.db._connection.rollback()

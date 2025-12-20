@@ -1,10 +1,12 @@
+import logging
+import os
+
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Bot
 from telegram.error import TelegramError
-import logging
-import os
+
 from database_manager import DatabaseManager
 from game.game_logic import GameManager
 from lobby.lobby_manager import LobbyManager
@@ -14,16 +16,17 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
 # Инициализация базы данных
 db_manager = DatabaseManager()
-lobby_manager = LobbyManager(db_manager)
 game_manager = GameManager(db_manager)
+lobby_manager = LobbyManager(db_manager, game_manager)
+game_manager.lobby_manager = lobby_manager
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 
-refresh = dict()
 
 async def get_username_from_id(user_id: int):
     try:
@@ -45,9 +48,6 @@ async def lobby_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("Моё лобби", callback_data="my_lobby"),
             InlineKeyboardButton("Выйти из лобби", callback_data="leave_lobby"),
-        ],
-        [
-            InlineKeyboardButton("Начать игру", callback_data="start_game"),
         ],
     ]
 
@@ -102,7 +102,6 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Поделитесь кодом приглашения с друзьями!"
         )
 
-        # Кнопка для копирования кода
         keyboard = [
             [
                 InlineKeyboardButton("🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}")
@@ -115,7 +114,7 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ],
             [
                 InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby"),
-            ]
+            ],
         ]
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -171,7 +170,6 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if result["success"]:
         lobby_info = lobby_manager.get_lobby_info(result["lobby_id"])
-        # TODO: изменить id на имена
         # Формируем список игроков
         players_list = "\n".join(
             [
@@ -184,7 +182,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ Вы успешно присоединились к лобби!\n\n"
             f"🆔 ID лобби: {lobby_info.lobby_id}\n"
             f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
-            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n"
+            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n\n"
             f"Список игроков:\n{players_list}"
         )
 
@@ -292,7 +290,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выход из лобби"""
-    #TODO: надо удалять пользователя из игры,если игра активна
+    # TODO: надо удалять пользователя из игры,если игра активна
     query = update.callback_query
     await query.answer()
 
@@ -335,14 +333,27 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Выходим из лобби
     result = lobby_manager.leave_lobby(user_id, lobby_id)
-
+    logger.info(f"Leave_lobby_return result: {result}")
     if result["success"]:
-        await query.edit_message_text(
-            "✅ Вы вышли из лобби.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
-            ),
-        )
+        # Завершаем обработку выхода
+        if result.get("game_processing_result", {}).get("needs_processing"):
+            await lobby_manager.complete_player_exit(context, result)
+
+        # Проверяем, не завершилась ли игра
+        if result.get("remaining_players", 0) <= 1:
+            await query.edit_message_text(
+                "✅ Вы вышли из лобби. Игра завершена.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
+        else:
+            await query.edit_message_text(
+                "✅ Вы вышли из лобби.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
@@ -353,8 +364,7 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def start_game(
-        update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало игры"""
     query = update.callback_query
     await query.answer()
@@ -425,6 +435,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback кнопок"""
     query = update.callback_query
     data = query.data
+    logger.info(data)
 
     if data == "create_lobby":
         await create_lobby(update, context)
