@@ -345,8 +345,7 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-async def start_game(
-        update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало игры"""
     query = update.callback_query
     await query.answer()
@@ -362,36 +361,36 @@ async def start_game(
         game_result = game_manager.start_game_session(lobby_id)
 
         if game_result["success"]:
-            # Рассылаем роли игрокам
-            await game_manager.send_roles_to_players(context, lobby_id)
+            # Рассылаем правила игрокам
+            await game_manager.send_rules_to_players(context, lobby_id)
 
-            # Устанавливаем состояние игры для первого игрока
+            # Получаем первого игрока
             first_player = game_manager.get_current_player(lobby_id)
+            if first_player:
+                # Отправляем сообщение первому игроку
+                await context.bot.send_message(
+                    chat_id=first_player,
+                    text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
+                         "Примеры вопросов:\n"
+                         "• «Мой персонаж человек?»\n"
+                         "• «Мой персонаж из фильма?»\n"
+                         "• «Мой персонаж умеет летать?»\n\n"
+                         "Для финальной догадки задайте вопрос в формате:\n"
+                         "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
+                )
 
-            # Отправляем сообщение первому игроку
-            await context.bot.send_message(
-                chat_id=first_player,
-                text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
-                     "Примеры вопросов:\n"
-                     "• «Мой персонаж человек?»\n"
-                     "• «Мой персонаж из фильма?»\n"
-                     "• «Мой персонаж умеет летать?»\n\n"
-                     "Для финальной догадки задайте вопрос в формате:\n"
-                     "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
-            )
-
-            # Уведомляем всех, что игра началась
-            for player_id in game_manager.active_games[lobby_id]['players']:
-                if player_id != first_player:
-                    await context.bot.send_message(
-                        chat_id=player_id,
-                        text="🎮 Игра началась!\n"
-                             f"Первый ход у: {await game_manager.get_username_from_id(context, first_player)}\n"
-                             "Ожидайте вопросов и голосуйте!",
-                    )
+                # Уведомляем остальных игроков
+                first_player_username = await game_manager.get_username_from_id(context, first_player)
+                for player_id in game_manager.active_games[lobby_id]['players']:
+                    if player_id != first_player:
+                        await context.bot.send_message(
+                            chat_id=player_id,
+                            text=f"Первый ход у: {first_player_username}\n"
+                                 "Ожидайте вопросов и голосуйте!",
+                        )
 
             await query.edit_message_text(
-                "🎮 Игра началась!\n" "Роли распределены. Первый игрок задает вопрос.",
+                "🎮 Игра началась!\nРоли распределены. Первый игрок задает вопрос.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
                 ),
