@@ -344,6 +344,46 @@ class GameManager(metaclass=database_manager.SingletonMeta):
             except Exception as e:
                 logger.error(f"Не удалось отправить сообщение игроку {player_id}: {e}")
 
+
+    async def send_rules_to_players(self, context: ContextTypes.DEFAULT_TYPE, lobby_id: int):
+            """Рассылает правила игры всем игрокам"""
+            if lobby_id not in self.active_games:
+                return
+
+            game_state = self.active_games[lobby_id]
+
+            for player_id in game_state['players']:
+                # Получаем роли всех игроков, кроме себя
+                other_players_roles = []
+                for other_id, role in game_state['roles'].items():
+                    if other_id != player_id:
+                        other_players_roles.append(
+                            f"Игрок {await self.get_username_from_id(context, other_id)}: {role}"
+                        )
+
+                # Создаем сообщение для игрока с правилами
+                message_text = (
+                        "🎮 Игра началась!\n\n"
+                        "📋 Роли других игроков:\n"
+                        + "\n".join(other_players_roles)
+                        + "\n\n❓ Ваша роль скрыта от вас!\n\n"
+                          "📝 Правила игры:\n"
+                          "1. Ваша цель - угадать, кто вы, задавая вопросы другим игрокам\n"
+                          "2. Вы можете задавать вопросы о своем персонаже (например: 'Мой персонаж человек?')\n"
+                          "3. Другие игроки голосуют, согласны ли они с вопросом\n"
+                          "4. Если большинство ответит 'Да' - вы можете задать еще вопрос\n"
+                          "5. Если большинство ответит 'Нет' - ход переходит следующему игроку\n"
+                          "6. Для финальной догадки используйте формат: 'Я [персонаж]!' (с восклицательным знаком)\n\n"
+                          "Удачи!"
+                )
+
+                # Отправляем сообщение
+                try:
+                    await context.bot.send_message(chat_id=player_id, text=message_text)
+                except Exception as e:
+                    logger.error(f"Не удалось отправить сообщение игроку {player_id}: {e}")
+
+
     async def get_username_from_id(
         self, context: ContextTypes.DEFAULT_TYPE, user_id: int
     ) -> str:
@@ -407,15 +447,21 @@ class GameManager(metaclass=database_manager.SingletonMeta):
         await update.message.reply_text("Вы не в активной игре!")
 
     async def send_vote_question(
-        self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
-        lobby_id: int,
-        question: str,
+            self,
+            update: Update,
+            context: ContextTypes.DEFAULT_TYPE,
+            lobby_id: int,
+            question: str,
     ):
         """Рассылает вопрос для голосования"""
         game_state = self.active_games[lobby_id]
         asking_player = self.get_current_player(lobby_id)
+
+        # Получаем имя персонажа спрашивающего игрока
+        asking_player_character_name = game_state['roles'][asking_player]
+
+        # Получаем username спрашивающего
+        asking_player_username = await self.get_username_from_id(context, asking_player)
 
         # Создаем клавиатуру для голосования
         keyboard = [
@@ -432,9 +478,9 @@ class GameManager(metaclass=database_manager.SingletonMeta):
                 try:
                     await context.bot.send_message(
                         chat_id=player_id,
-                        text=f"❓ Вопрос от {await self.get_username_from_id(context, asking_player)}:\n\n"
-                        f"«{question}»\n\n"
-                        f"Ответьте на вопрос с точки зрения ВАШЕГО персонажа.",
+                        text=f"❓ Вопрос от {asking_player_username}:\n\n"
+                             f"«{question}»\n\n"
+                             f"Ответьте на вопрос о персонаже {asking_player_character_name}.",
                         reply_markup=reply_markup,
                     )
                 except Exception as e:
@@ -442,8 +488,10 @@ class GameManager(metaclass=database_manager.SingletonMeta):
 
         # Уведомляем спрашивающего
         await update.message.reply_text(
-            "✅ Ваш вопрос отправлен другим игрокам!\n" f"Ждем ответов..."
+            "✅ Ваш вопрос отправлен другим игрокам!\n"
+            f"Ждем ответов..."
         )
+
 
     async def process_vote(
         self,
