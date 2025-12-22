@@ -26,7 +26,7 @@ BOT_TOKEN: Optional[str] = os.getenv("BOT_TOKEN")
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
-logging.getLogger('httpx').setLevel(logging.WARNING) # убираем лишние логи
+logging.getLogger('httpx').setLevel(logging.WARNING)  # убираем лишние логи
 logger = logging.getLogger(__name__)
 
 
@@ -46,9 +46,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("lobby", lobby_menu))
 
-    application.add_handler(
-        CommandHandler("history", game_logic.get_question_history)
-    )
+    application.add_handler(CommandHandler("history", game_logic.get_question_history))
 
     # Callback для игрового цикла
     application.add_handler(

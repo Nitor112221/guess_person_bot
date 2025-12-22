@@ -8,6 +8,7 @@ from dto.lobby_dto import LobbyDTO
 
 logger = logging.getLogger(__name__)
 
+
 class LobbyManager:
     def __init__(self, db_manager, game_manager):
         self.db = db_manager
@@ -18,7 +19,7 @@ class LobbyManager:
         return secrets.token_urlsafe(8).upper().replace("_", "").replace("-", "")[:8]
 
     def create_lobby(
-            self, host_id: int, max_players: int = 10, is_private: bool = False
+        self, host_id: int, max_players: int = 10, is_private: bool = False
     ) -> Dict[str, Any]:
         """Создание нового лобби"""
         try:
@@ -190,7 +191,6 @@ class LobbyManager:
                 "message": "Ошибка при присоединении к лобби",
             }
 
-
     def get_lobby_info(self, lobby_id: int) -> Optional[LobbyDTO]:
         """Получение полной информации о лобби"""
         # Информация о лобби
@@ -301,7 +301,7 @@ class LobbyManager:
                 game_processing_result = {
                     "needs_processing": True,
                     "exit_info": exit_info,
-                    "remaining_players": remaining_players
+                    "remaining_players": remaining_players,
                 }
 
             # Шаг 6: Обрабатываем состояние лобби
@@ -352,7 +352,7 @@ class LobbyManager:
                 "game_processing_result": game_processing_result,
                 "remaining_players": remaining_players,
                 "user_id": user_id,
-                "lobby_id": lobby_id
+                "lobby_id": lobby_id,
             }
 
         except Exception as e:
@@ -364,9 +364,7 @@ class LobbyManager:
             }
 
     async def complete_player_exit(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            exit_result: Dict[str, Any]
+        self, context: ContextTypes.DEFAULT_TYPE, exit_result: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Завершение обработки выхода игрока (async часть)"""
         if not exit_result.get("game_processing_result", {}).get("needs_processing"):
@@ -415,7 +413,7 @@ class LobbyManager:
         return {
             "processed": True,
             "game_result": game_result,
-            "notifications_sent": True
+            "notifications_sent": True,
         }
 
     def start_game(self, lobby_id: int, host_id: int) -> Dict[str, Any]:

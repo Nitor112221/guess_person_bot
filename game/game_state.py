@@ -84,7 +84,7 @@ class GameState:
         self.current_vote = VoteData(
             question=question,
             total_players=len(self.players) - 1,  # минус спрашивающий
-            question_owner_id=question_owner_id
+            question_owner_id=question_owner_id,
         )
 
     def add_vote(self, user_id: int, vote: str) -> bool:
@@ -149,11 +149,11 @@ class GameState:
             "players": {
                 str(user_id): {
                     "role": data.role,
-                    "questions_asked": data.questions_asked
+                    "questions_asked": data.questions_asked,
                 }
                 for user_id, data in self.players.items()
             },
             "current_player_index": self.current_player_index,
             "current_vote": self.current_vote.to_dict() if self.current_vote else None,
-            "winner_id": self.winner_id
+            "winner_id": self.winner_id,
         }

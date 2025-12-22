@@ -83,7 +83,13 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"❌ Вы находитесь в лобби с активной игрой!\n"
                     "Пожалуйста, дождитесь окончания игры или покиньте лобби.",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "↩️ Назад в меню", callback_data="back_to_menu"
+                                )
+                            ]
+                        ]
                     ),
                 )
                 return
@@ -93,7 +99,13 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
                     "Пожалуйста, покиньте текущее лобби перед созданием нового.",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "↩️ Назад в меню", callback_data="back_to_menu"
+                                )
+                            ]
+                        ]
                     ),
                 )
                 return
@@ -102,7 +114,13 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "❌ Произошла ошибка при проверке вашего лобби.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "↩️ Назад в меню", callback_data="back_to_menu"
+                            )
+                        ]
+                    ]
                 ),
             )
             return
@@ -130,10 +148,14 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [
-                InlineKeyboardButton("🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}")
+                InlineKeyboardButton(
+                    "🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}"
+                )
             ],
             [
-                InlineKeyboardButton("🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}")
+                InlineKeyboardButton(
+                    "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
+                )
             ],
             [
                 InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu"),
@@ -177,7 +199,13 @@ async def join_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"❌ Вы находитесь в лобби с активной игрой!\n"
                     "Пожалуйста, дождитесь окончания игры или покиньте лобби.",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "↩️ Назад в меню", callback_data="back_to_menu"
+                                )
+                            ]
+                        ]
                     ),
                 )
                 return
@@ -186,7 +214,13 @@ async def join_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"❌ Вы уже находитесь в лобби (ID: {current_lobby_id})!\n"
                     "Пожалуйста, покиньте текущее лобби перед присоединением к другому.",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "↩️ Назад в меню", callback_data="back_to_menu"
+                                )
+                            ]
+                        ]
                     ),
                 )
                 return
@@ -195,7 +229,13 @@ async def join_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "❌ Произошла ошибка при проверке вашего лобби.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "↩️ Назад в меню", callback_data="back_to_menu"
+                            )
+                        ]
+                    ]
                 ),
             )
             return
@@ -250,9 +290,23 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         keyboard = []
         if lobby_info.host_id == user_id:
-            keyboard.append([InlineKeyboardButton("🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}")])
-        keyboard.append([InlineKeyboardButton("🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}")])
-        keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}"
+                    )
+                ]
+            )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
+                )
+            ]
+        )
+        keyboard.append(
+            [InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]
+        )
         keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -338,7 +392,6 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard.append([InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")])
     keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
-
 
     current_message_text = query.message.text
     if current_message_text == if_edited_message_text:
@@ -449,7 +502,9 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = lobby_manager.start_game(lobby_id, user_id)
 
     if not result["success"]:
-        logger.error(f"Error starting game: {result.get('error', None)} Message: {result['message']}")
+        logger.error(
+            f"Error starting game: {result.get('error', None)} Message: {result['message']}"
+        )
         await query.edit_message_text(
             f"❌ {result['message']}",
             reply_markup=InlineKeyboardMarkup(
@@ -508,12 +563,12 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Отправляем уведомление первому игроку через GameNotifier
-    await game_logic.notifier.send_turn_notification(
-        context, game_state, first_player
-    )
+    await game_logic.notifier.send_turn_notification(context, game_state, first_player)
 
     # Уведомляем остальных игроков
-    first_player_username = await game_logic.notifier.get_username(context, first_player)
+    first_player_username = await game_logic.notifier.get_username(
+        context, first_player
+    )
 
     for player_id in game_state.get_all_players():
         if player_id != first_player:
@@ -521,8 +576,9 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context,
                 player_id,
                 f"🎮 Первый ход у: {first_player_username}\n"
-                "Ожидайте вопросов и будьте готовы голосовать!"
+                "Ожидайте вопросов и будьте готовы голосовать!",
             )
+
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback кнопок"""

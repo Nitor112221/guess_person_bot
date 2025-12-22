@@ -15,9 +15,7 @@ class GameNotifier:
     # ===== Утилиты =====
 
     async def get_username(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            user_id: int
+        self, context: ContextTypes.DEFAULT_TYPE, user_id: int
     ) -> str:
         """Получение username с кэшированием"""
         if user_id in self._username_cache:
@@ -35,19 +33,16 @@ class GameNotifier:
     # ===== Основные уведомления =====
 
     async def send_to_player(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            user_id: int,
-            text: str,
-            reply_markup: Optional[InlineKeyboardMarkup] = None
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_id: int,
+        text: str,
+        reply_markup: Optional[InlineKeyboardMarkup] = None,
     ) -> bool:
         """Отправка сообщения конкретному игроку"""
         try:
             await context.bot.send_message(
-                chat_id=user_id,
-                text=text,
-                reply_markup=reply_markup,
-                parse_mode="HTML"
+                chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="HTML"
             )
             return True
         except Exception as e:
@@ -55,11 +50,11 @@ class GameNotifier:
             return False
 
     async def broadcast_to_game(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            text: str,
-            exclude_users: List[int] = None
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        text: str,
+        exclude_users: List[int] = None,
     ) -> Dict[int, bool]:
         """Рассылка сообщения всем игрокам игры"""
         results = {}
@@ -77,11 +72,11 @@ class GameNotifier:
     # ===== Игровые уведомления =====
 
     async def send_role_notification(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            user_id: int,
-            other_players_roles: Dict[int, str]
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        user_id: int,
+        other_players_roles: Dict[int, str],
     ) -> bool:
         """Отправка игроку информации о ролях других игроков"""
         try:
@@ -105,11 +100,11 @@ class GameNotifier:
             return False
 
     async def send_game_rules(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            user_id: int,
-            other_players_roles: Dict[int, str]
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        user_id: int,
+        other_players_roles: Dict[int, str],
     ) -> bool:
         """Отправка правил игры"""
         try:
@@ -140,12 +135,12 @@ class GameNotifier:
             return False
 
     async def send_vote_question(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            asking_player_id: int,
-            question: str,
-            asking_player_role: str
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        asking_player_id: int,
+        question: str,
+        asking_player_role: str,
     ) -> bool:
         """Рассылка вопроса для голосования"""
         try:
@@ -153,8 +148,12 @@ class GameNotifier:
 
             keyboard = [
                 [
-                    InlineKeyboardButton("✅ Да", callback_data=f"vote_yes_{game_state.lobby_id}"),
-                    InlineKeyboardButton("❌ Нет", callback_data=f"vote_no_{game_state.lobby_id}"),
+                    InlineKeyboardButton(
+                        "✅ Да", callback_data=f"vote_yes_{game_state.lobby_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "❌ Нет", callback_data=f"vote_no_{game_state.lobby_id}"
+                    ),
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -181,13 +180,13 @@ class GameNotifier:
             return False
 
     async def send_vote_results(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            question: str,
-            yes_votes: int,
-            no_votes: int,
-            majority_yes: bool
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        question: str,
+        yes_votes: int,
+        no_votes: int,
+        majority_yes: bool,
     ) -> Dict[int, bool]:
         """Рассылка результатов голосования"""
         result_text = (
@@ -203,7 +202,9 @@ class GameNotifier:
                 current_player_username = await self.get_username(
                     context, game_state.get_current_player()
                 )
-                result_text += f"\n🎮 {current_player_username} может задать еще один вопрос."
+                result_text += (
+                    f"\n🎮 {current_player_username} может задать еще один вопрос."
+                )
             else:
                 result_text += f"\n🎮 Вы можете задать еще один вопрос."
         else:
@@ -218,12 +219,12 @@ class GameNotifier:
         return await self.broadcast_to_game(context, game_state, result_text)
 
     async def send_player_exit_notification(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            exiting_user_id: int,
-            exit_info: Dict[str, Any],
-            game_result: Dict[str, Any] = None
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        exiting_user_id: int,
+        exit_info: Dict[str, Any],
+        game_result: Dict[str, Any] = None,
     ) -> Dict[int, bool]:
         """Уведомление о выходе игрока"""
         exiting_username = await self.get_username(context, exiting_user_id)
@@ -252,7 +253,9 @@ class GameNotifier:
                         notification_text += f"{username}: {role}\n"
         else:
             # Игра продолжается
-            notification_text += f"👥 Осталось игроков: {game_state.get_remaining_players_count()}\n"
+            notification_text += (
+                f"👥 Осталось игроков: {game_state.get_remaining_players_count()}\n"
+            )
 
             if exit_info.get("was_current_player"):
                 next_player = game_result.get("next_player") if game_result else None
@@ -265,11 +268,11 @@ class GameNotifier:
         )
 
     async def send_game_end_notification(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            winner_id: int,
-            winner_role: str
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state,
+        winner_id: int,
+        winner_role: str,
     ) -> Dict[int, bool]:
         """Уведомление о завершении игры"""
         winner_username = await self.get_username(context, winner_id)
@@ -292,10 +295,7 @@ class GameNotifier:
         return await self.broadcast_to_game(context, game_state, end_message)
 
     async def send_turn_notification(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state,
-            player_id: int
+        self, context: ContextTypes.DEFAULT_TYPE, game_state, player_id: int
     ) -> bool:
         """Уведомление о том, что ход перешел к игроку"""
         try:

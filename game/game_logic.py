@@ -16,20 +16,27 @@ logger = logging.getLogger(__name__)
 
 class GameLogic:
     """Основная игровая логика - координация всех компонентов"""
+
     _instance: Optional['GameLogic'] = None
 
-    def __new__(cls, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None):
+    def __new__(
+        cls, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
+    ):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None):
+    def __init__(
+        self, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
+    ):
         # Защита от повторной инициализации
         if hasattr(self, "_initialized"):
             return
 
         if not db_manager or not lobby_manager:
-            raise ValueError("GameLogic требует db_manager и lobby_manager при первой инициализации")
+            raise ValueError(
+                "GameLogic требует db_manager и lobby_manager при первой инициализации"
+            )
 
         self.db = db_manager
         self.lobby_manager = lobby_manager
@@ -101,6 +108,7 @@ class GameLogic:
             # Создаем состояние игры
             game_state = self.storage.create_game(lobby_id, roles_dict)
 
+            # TODO: вынести в game_manager
             # Обновляем статус лобби
             self.lobby_manager.db.cursor.execute(
                 """
@@ -121,50 +129,6 @@ class GameLogic:
         except Exception as e:
             logger.error(f"Ошибка начала игры: {e}")
             return {"success": False, "message": f"Ошибка начала игры: {str(e)}"}
-
-    async def send_roles_to_players(
-            self, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
-    ):
-        """Рассылает роли игрокам"""
-        game_state = self.storage.get_game(lobby_id)
-        if not game_state:
-            return
-
-        for player_id in game_state.get_all_players():
-            # Получаем роли всех игроков, кроме себя
-            other_players_roles = {}
-            for other_id in game_state.get_all_players():
-                if other_id != player_id:
-                    role = game_state.get_player_role(other_id)
-                    if role:
-                        other_players_roles[other_id] = role
-
-            # Отправляем уведомление с ролями
-            await self.notifier.send_role_notification(
-                context, game_state, player_id, other_players_roles
-            )
-
-    async def send_rules_to_players(
-            self, context: ContextTypes.DEFAULT_TYPE, lobby_id: int
-    ):
-        """Рассылает правила игры всем игрокам"""
-        game_state = self.storage.get_game(lobby_id)
-        if not game_state:
-            return
-
-        for player_id in game_state.get_all_players():
-            # Получаем роли всех игроков, кроме себя
-            other_players_roles = {}
-            for other_id in game_state.get_all_players():
-                if other_id != player_id:
-                    role = game_state.get_player_role(other_id)
-                    if role:
-                        other_players_roles[other_id] = role
-
-            # Отправляем правила
-            await self.notifier.send_game_rules(
-                context, game_state, player_id, other_players_roles
-            )
 
     # ===== Обработка игровых действий =====
 
@@ -187,7 +151,13 @@ class GameLogic:
 
         # Проверяем, не является ли вопрос финальной догадкой
         if question.lower().startswith("я ") and "!" == question[-1]:
-            await self.process_final_guess(update, context, game_state, user_id, question)
+            await self.process_final_guess(
+                update,
+                context,
+                game_state,
+                user_id,
+                question,
+            )
             return
 
         # Сохраняем вопрос в историю
@@ -206,8 +176,7 @@ class GameLogic:
 
         if success:
             await update.message.reply_text(
-                "✅ Ваш вопрос отправлен другим игрокам!\n"
-                "Ждем ответов..."
+                "✅ Ваш вопрос отправлен другим игрокам!\n" "Ждем ответов..."
             )
         else:
             await update.message.reply_text(
@@ -215,11 +184,11 @@ class GameLogic:
             )
 
     async def process_vote(
-            self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
-            lobby_id: int,
-            vote_type: str,
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        vote_type: str,
     ):
         """Обработка голоса"""
         query = update.callback_query
@@ -252,9 +221,7 @@ class GameLogic:
             await self.announce_results(context, game_state)
 
     async def announce_results(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState
+        self, context: ContextTypes.DEFAULT_TYPE, game_state: GameState
     ):
         """Объявляет результаты голосования"""
         # Получаем результаты
@@ -274,9 +241,7 @@ class GameLogic:
             question_owner_id, game_state.lobby_id, limit=1
         )
         if history:
-            self.storage.update_question_votes(
-                history[0]["id"], yes_votes, no_votes
-            )
+            self.storage.update_question_votes(history[0]["id"], yes_votes, no_votes)
 
         # Определяем результат
         majority_yes = yes_votes > no_votes
@@ -294,17 +259,15 @@ class GameLogic:
         await self.notifier.send_vote_results(
             context, game_state, question, yes_votes, no_votes, majority_yes
         )
-        await self.notifier.send_turn_notification(
-            context, game_state, player
-        )
+        await self.notifier.send_turn_notification(context, game_state, player)
 
     async def process_final_guess(
-            self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            user_id: int,
-            guess: str,
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state: GameState,
+        user_id: int,
+        guess: str,
     ):
         """Обработка финальной догадки"""
         # Извлекаем предполагаемого персонажа
@@ -325,7 +288,7 @@ class GameLogic:
                     context,
                     game_state,
                     f"❌ {await self.notifier.get_username(context, user_id)} не угадал(а)!\n"
-                    f"Ход переходит следующему игроку."
+                    f"Ход переходит следующему игроку.",
                 )
 
                 # Передаем ход следующему
@@ -334,11 +297,11 @@ class GameLogic:
                 )
 
     async def end_game(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            winner_id: int,
-            guessed: bool,
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state: GameState,
+        winner_id: int,
+        guessed: bool,
     ):
         """Завершение игры"""
         if not guessed:
@@ -350,7 +313,7 @@ class GameLogic:
         await self.notifier.send_game_end_notification(
             context, game_state, winner_id, winner_role
         )
-
+        # TODO: вынести в game_manager
         # Обновляем статус лобби в БД
         self.lobby_manager.db.cursor.execute(
             """
@@ -375,7 +338,7 @@ class GameLogic:
     # ===== Управление игроками =====
 
     def prepare_player_exit(
-            self, lobby_id: int, exiting_player_id: int
+        self, lobby_id: int, exiting_player_id: int
     ) -> Dict[str, Any]:
         """Подготовка к выходу игрока: сбор информации до удаления"""
         game_state = self.storage.get_game(lobby_id)
@@ -388,7 +351,7 @@ class GameLogic:
             "had_voted": False,
             "was_last_vote": False,
             "remaining_players_count": game_state.get_player_count() - 1,
-            "next_player": None
+            "next_player": None,
         }
 
         # Проверяем, был ли игрок текущим
@@ -399,7 +362,8 @@ class GameLogic:
             if game_state.get_player_count() > 1:
                 # Получаем список игроков без выходящего
                 player_ids = [
-                    pid for pid in game_state.get_all_players()
+                    pid
+                    for pid in game_state.get_all_players()
                     if pid != exiting_player_id
                 ]
                 if player_ids:
@@ -411,20 +375,22 @@ class GameLogic:
             result["next_player"] = current_player
 
         # Проверяем, голосовал ли игрок
-        if (game_state.status == GameStatus.VOTING and
-                game_state.current_vote and
-                exiting_player_id in game_state.current_vote.votes):
+        if (
+            game_state.status == GameStatus.VOTING
+            and game_state.current_vote
+            and exiting_player_id in game_state.current_vote.votes
+        ):
             result["had_voted"] = True
 
         logger.info(f"Prepare_Player_exit result: {result}")
         return result
 
     async def process_player_exit(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            lobby_id: int,
-            exiting_player_id: int,
-            exit_info: Dict[str, Any]
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        exiting_player_id: int,
+        exit_info: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Обработка выхода игрока после сбора информации"""
         game_state = self.storage.get_game(lobby_id)
@@ -461,8 +427,7 @@ class GameLogic:
         )
 
         # Если все проголосовали, объявляем результаты
-        if (game_state.status == GameStatus.VOTING and
-                game_state.is_voting_complete()):
+        if game_state.status == GameStatus.VOTING and game_state.is_voting_complete():
             await self.announce_results(context, game_state)
 
         logger.info(f"Process_Player_exit result: {result}")
@@ -476,7 +441,7 @@ class GameLogic:
         return game_state.get_current_player() if game_state else None
 
     async def get_question_history(
-            self, update: Update, context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """Показывает историю вопросов пользователя"""
         user_id = update.effective_user.id
@@ -491,9 +456,7 @@ class GameLogic:
             return
 
         # Получаем историю
-        history = self.storage.get_player_question_history(
-            user_id, game_state.lobby_id
-        )
+        history = self.storage.get_player_question_history(user_id, game_state.lobby_id)
 
         if not history:
             await update.message.reply_text(
@@ -516,6 +479,5 @@ class GameLogic:
             history_text += f"   📅 {time_str} | {vote_result}\n\n"
 
         await update.message.reply_text(
-            f"{history_text}\n"
-            f"📊 Всего вопросов: {len(history)}"
+            f"{history_text}\n" f"📊 Всего вопросов: {len(history)}"
         )
