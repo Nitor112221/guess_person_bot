@@ -45,20 +45,14 @@ class GameState:
         """Добавление игрока в игру"""
         self.players[user_id] = PlayerData(user_id=user_id, role=role)
 
-    def remove_player(self, user_id: int) -> bool:
+    def remove_player(self, user_id: int, next_player: int) -> bool:
         """Удаление игрока из игры"""
         if user_id in self.players:
             del self.players[user_id]
 
             # Если удалили текущего игрока, нужно пересчитать индекс
             player_ids = list(self.players.keys())
-            if user_id == self.get_current_player():
-                if player_ids:
-                    # Находим нового текущего игрока
-                    new_index = 0  # По умолчанию первый
-                    self.current_player_index = new_index
-                else:
-                    self.current_player_index = 0
+            self.current_player_index = player_ids.index(next_player)
             return True
         return False
 

@@ -364,71 +364,91 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало игры"""
+    """Начало игры с использованием новой архитектуры"""
     query = update.callback_query
     await query.answer()
 
     lobby_id = int(query.data.split("_")[-1])
     user_id = update.effective_user.id
 
-    # Пытаемся начать игру
+    # Пытаемся начать игру через LobbyManager
     result = lobby_manager.start_game(lobby_id, user_id)
 
-    if result["success"]:
-        # Запускаем игровую сессию
-        game_result = game_logic.start_game_session(lobby_id)
-
-        if game_result["success"]:
-            # Рассылаем правила игрокам
-            await game_logic.send_rules_to_players(context, lobby_id)
-
-            # Получаем первого игрока
-            first_player = game_logic.get_current_player(lobby_id)
-            if first_player:
-                # Отправляем сообщение первому игроку
-                await context.bot.send_message(
-                    chat_id=first_player,
-                    text="🎮 Ваш ход! Задайте вопрос о вашем персонаже.\n"
-                         "Примеры вопросов:\n"
-                         "• «Мой персонаж человек?»\n"
-                         "• «Мой персонаж из фильма?»\n"
-                         "• «Мой персонаж умеет летать?»\n\n"
-                         "Для финальной догадки задайте вопрос в формате:\n"
-                         "«Я [предполагаемый персонаж]!» (обязателен восклицательный знак в конце!)",
-                )
-
-                # Уведомляем остальных игроков
-                first_player_username = await game_logic.get_username_from_id(context, first_player)
-                for player_id in game_logic.active_games[lobby_id]['players']:
-                    if player_id != first_player:
-                        await context.bot.send_message(
-                            chat_id=player_id,
-                            text=f"Первый ход у: {first_player_username}\n"
-                                 "Ожидайте вопросов и голосуйте!",
-                        )
-
-            await query.edit_message_text(
-                "🎮 Игра началась!\nРоли распределены. Первый игрок задает вопрос.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
-                ),
-            )
-        else:
-            await query.edit_message_text(
-                f"❌ Ошибка начала игры: {game_result['message']}",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
-                ),
-            )
-    else:
-        logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
+    if not result["success"]:
+        logger.error(f"Error starting game: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
             f"❌ {result['message']}",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
+        return
 
+    # Запускаем игровую сессию через GameLogic
+    game_result = game_logic.start_game_session(lobby_id)
+
+    if not game_result["success"]:
+        await query.edit_message_text(
+            f"❌ Ошибка начала игры: {game_result['message']}",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
+
+    # Получаем состояние игры
+    game_state = game_logic.storage.get_game(lobby_id)
+    if not game_state:
+        await query.edit_message_text(
+            "❌ Не удалось получить состояние игры",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
+
+    # Рассылаем правила игрокам через GameNotifier
+    for player_id in game_state.get_all_players():
+        # Получаем роли всех игроков, кроме текущего
+        other_players_roles = {}
+        for other_id in game_state.get_all_players():
+            if other_id != player_id:
+                role = game_state.get_player_role(other_id)
+                if role:
+                    other_players_roles[other_id] = role
+
+        # Отправляем правила через GameNotifier
+        await game_logic.notifier.send_game_rules(
+            context, game_state, player_id, other_players_roles
+        )
+
+    # Получаем первого игрока
+    first_player = game_state.get_current_player()
+    if not first_player:
+        await query.edit_message_text(
+            "❌ Не удалось определить первого игрока",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
+
+    # Отправляем уведомление первому игроку через GameNotifier
+    await game_logic.notifier.send_turn_notification(
+        context, game_state, first_player
+    )
+
+    # Уведомляем остальных игроков
+    first_player_username = await game_logic.notifier.get_username(context, first_player)
+
+    for player_id in game_state.get_all_players():
+        if player_id != first_player:
+            await game_logic.notifier.send_to_player(
+                context,
+                player_id,
+                f"🎮 Первый ход у: {first_player_username}\n"
+                "Ожидайте вопросов и будьте готовы голосовать!"
+            )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback кнопок"""

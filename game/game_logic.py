@@ -281,31 +281,22 @@ class GameLogic:
         # Определяем результат
         majority_yes = yes_votes > no_votes
 
+        # Обрабатываем результат
+        game_state.end_vote()
+        if majority_yes:
+            # Игрок остается текущим
+            player = game_state.get_current_player()
+        else:
+            # Передаем ход следующему игроку
+            player = game_state.next_player()
+
         # Рассылаем результаты
         await self.notifier.send_vote_results(
             context, game_state, question, yes_votes, no_votes, majority_yes
         )
-
-        # Обрабатываем результат
-        if majority_yes:
-            # Игрок остается текущим, сбрасываем голосование
-            game_state.end_vote()
-
-            # Уведомляем текущего игрока
-            current_player = game_state.get_current_player()
-            if current_player:
-                await self.notifier.send_turn_notification(
-                    context, game_state, current_player
-                )
-        else:
-            # Передаем ход следующему игроку
-            game_state.end_vote()
-            next_player = game_state.next_player()
-
-            if next_player:
-                await self.notifier.send_turn_notification(
-                    context, game_state, next_player
-                )
+        await self.notifier.send_turn_notification(
+            context, game_state, player
+        )
 
     async def process_final_guess(
             self,
@@ -440,10 +431,7 @@ class GameLogic:
         if not game_state:
             return {"end_game": False}
 
-        # Удаляем игрока из состояния
-        game_state.remove_player(exiting_player_id)
-
-        result = {"end_game": False}
+        result: Dict[str, Any] = {"end_game": False}
 
         # Обрабатываем сценарии
         if exit_info.get("was_current_player"):
@@ -451,7 +439,14 @@ class GameLogic:
             if next_player:
                 result["next_player"] = next_player
         else:
-            result["next_player"] = exit_info.get("next_player")
+            result["next_player"] = game_state.get_current_player()
+
+        # Удаляем игрока из состояния
+        game_state.remove_player(exiting_player_id, result["next_player"])
+
+        if exit_info.get("had_voted"):
+            del game_state.current_vote.votes[exiting_player_id]
+            game_state.current_vote.total_players -= 1
 
         # Проверяем, остался ли 1 игрок
         if game_state.get_player_count() == 1:
