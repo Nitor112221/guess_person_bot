@@ -13,9 +13,8 @@ from telegram.ext import (
     ConversationHandler,
 )
 
+from ServiceController import ServiceContainer
 from config import SELECTING_ACTION, JOINING_LOBBY
-from database_manager import DatabaseManager
-from game.game_logic import GameManager
 from handlers.base_command import cancel, start, help_command
 from lobby.commands import button_callback, process_invite_code, lobby_menu
 
@@ -27,6 +26,7 @@ BOT_TOKEN: Optional[str] = os.getenv("BOT_TOKEN")
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+logging.getLogger('httpx').setLevel(logging.WARNING) # убираем лишние логи
 logger = logging.getLogger(__name__)
 
 
@@ -37,17 +37,23 @@ def main() -> None:
     if not os.path.exists("data/"):
         os.mkdir("data/")
 
-    game_manager = GameManager(DatabaseManager())
+    # Инициализация
+    services = ServiceContainer()
+    game_logic = services.game_logic
 
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("lobby", lobby_menu))
 
+    application.add_handler(
+        CommandHandler("history", game_logic.get_question_history)
+    )
+
     # Callback для игрового цикла
     application.add_handler(
         CallbackQueryHandler(
-            lambda update, context: game_manager.process_vote(
+            lambda update, context: game_logic.process_vote(
                 update,
                 context,
                 int(update.callback_query.data.split('_')[2]),
@@ -75,7 +81,7 @@ def main() -> None:
 
     # Обработчик вопросов во время игры
     application.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, game_manager.ask_question)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, game_logic.ask_question)
     )
 
     # Запускаем бота

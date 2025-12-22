@@ -7,9 +7,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from telegram import Bot
 from telegram.error import TelegramError
 
-from database_manager import DatabaseManager
-from game.game_logic import GameManager
-from lobby.lobby_manager import LobbyManager
+from ServiceController import ServiceContainer
 from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
 
 logging.basicConfig(
@@ -17,11 +15,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация базы данных
-db_manager = DatabaseManager()
-game_manager = GameManager(db_manager)
-lobby_manager = LobbyManager(db_manager, game_manager)
-game_manager.lobby_manager = lobby_manager
+# Инициализируем контейнер сервисов
+services = ServiceContainer()
+
+# Получаем сервисы из контейнера
+lobby_manager = services.lobby_manager
+game_logic = services.game_logic
 
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
@@ -377,14 +376,14 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if result["success"]:
         # Запускаем игровую сессию
-        game_result = game_manager.start_game_session(lobby_id)
+        game_result = game_logic.start_game_session(lobby_id)
 
         if game_result["success"]:
             # Рассылаем правила игрокам
-            await game_manager.send_rules_to_players(context, lobby_id)
+            await game_logic.send_rules_to_players(context, lobby_id)
 
             # Получаем первого игрока
-            first_player = game_manager.get_current_player(lobby_id)
+            first_player = game_logic.get_current_player(lobby_id)
             if first_player:
                 # Отправляем сообщение первому игроку
                 await context.bot.send_message(
@@ -399,8 +398,8 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
                 # Уведомляем остальных игроков
-                first_player_username = await game_manager.get_username_from_id(context, first_player)
-                for player_id in game_manager.active_games[lobby_id]['players']:
+                first_player_username = await game_logic.get_username_from_id(context, first_player)
+                for player_id in game_logic.active_games[lobby_id]['players']:
                     if player_id != first_player:
                         await context.bot.send_message(
                             chat_id=player_id,
@@ -457,7 +456,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(parts) == 3:
             vote_type = parts[1]  # yes или no
             lobby_id = int(parts[2])
-            await game_manager.process_vote(update, context, lobby_id, vote_type)
+            await game_logic.process_vote(update, context, lobby_id, vote_type)
     elif data.startswith("info_"):
         # TODO: Показать детальную информацию о лобби
         await query.answer("Функция в разработке", show_alert=True)
