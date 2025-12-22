@@ -71,17 +71,44 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # Проверяем, не находится ли пользователь уже в лобби
     current_lobby_id = lobby_manager.get_user_lobby(user_id)
+
     if current_lobby_id:
-        await query.edit_message_text(
-            f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
-            "Пожалуйста, покиньте текущее лобби перед созданием нового.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
-            ),
-        )
-        return
+        # Получаем информацию о текущем лобби
+        current_lobby_info = lobby_manager.get_lobby_info(current_lobby_id)
+
+        if current_lobby_info:
+            if current_lobby_info.status == 'playing':
+                # Случай 1: Игра активна
+                await query.edit_message_text(
+                    f"❌ Вы находитесь в лобби с активной игрой!\n"
+                    "Пожалуйста, дождитесь окончания игры или покиньте лобби.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                    ),
+                )
+                return
+            else:
+                # Случай 2: Лобби есть, но игра не активна
+                await query.edit_message_text(
+                    f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
+                    "Пожалуйста, покиньте текущее лобби перед созданием нового.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                    ),
+                )
+                return
+        else:
+            # Случай 3: Лобби ID есть, но информация не найдена (ошибка БД)
+            await query.edit_message_text(
+                "❌ Произошла ошибка при проверке вашего лобби.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                ),
+            )
+            return
+
+    # Если мы здесь, значит пользователь не в лобби - создаем новое
 
     # Создаем лобби (публичное по умолчанию)
     result = lobby_manager.create_lobby(
@@ -141,14 +168,38 @@ async def join_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверяем, не находится ли пользователь уже в лобби
     current_lobby_id = lobby_manager.get_user_lobby(user_id)
     if current_lobby_id:
-        await query.edit_message_text(
-            f"❌ Вы уже находитесь в лобби {current_lobby_id}!\n"
-            "Пожалуйста, покиньте текущее лобби перед присоединением к другому.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
-            ),
-        )
-        return
+        # Теперь проверяем статус лобби отдельно
+        # Сначала получаем полную информацию о лобби
+        lobby_info = lobby_manager.get_lobby_info(current_lobby_id)
+
+        if lobby_info:
+            if lobby_info.status == 'playing':
+                await query.edit_message_text(
+                    f"❌ Вы находитесь в лобби с активной игрой!\n"
+                    "Пожалуйста, дождитесь окончания игры или покиньте лобби.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                    ),
+                )
+                return
+            else:
+                await query.edit_message_text(
+                    f"❌ Вы уже находитесь в лобби (ID: {current_lobby_id})!\n"
+                    "Пожалуйста, покиньте текущее лобби перед присоединением к другому.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                    ),
+                )
+                return
+        else:
+            # Если информация о лобби не найдена, но ID есть - странная ситуация
+            await query.edit_message_text(
+                "❌ Произошла ошибка при проверке вашего лобби.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu")]]
+                ),
+            )
+            return
 
     await query.edit_message_text(
         "Введите код приглашения лобби:",
@@ -164,6 +215,18 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обработка введенного кода приглашения"""
     invite_code = update.message.text.strip().upper()
     user_id = update.effective_user.id
+
+    # Сначала проверяем, активна ли игра в лобби
+    lobby = lobby_manager.get_lobby_by_code(invite_code)
+    if lobby and lobby.status == 'playing':
+        await update.message.reply_text(
+            "❌ В этом лобби уже идет игра!\n"
+            "Присоединиться можно только к лобби в ожидании игроков.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ Назад", callback_data="back_to_menu")]]
+            ),
+        )
+        return JOINING_LOBBY
 
     # Пытаемся присоединиться к лобби
     result = lobby_manager.join_lobby(user_id, invite_code)
@@ -372,6 +435,17 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lobby_id = int(query.data.split("_")[-1])
     user_id = update.effective_user.id
 
+    # Дополнительная проверка статуса перед началом игры
+    lobby_info = lobby_manager.get_lobby_info(lobby_id)
+    if lobby_info and lobby_info.status == 'playing':
+        await query.edit_message_text(
+            "❌ Игра уже идет в этом лобби!",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return
+
     # Пытаемся начать игру
     result = lobby_manager.start_game(lobby_id, user_id)
 
@@ -458,9 +532,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             vote_type = parts[1]  # yes или no
             lobby_id = int(parts[2])
             await game_manager.process_vote(update, context, lobby_id, vote_type)
-    elif data.startswith("info_"):
-        # TODO: Показать детальную информацию о лобби
-        await query.answer("Функция в разработке", show_alert=True)
     elif data == "back_to_menu":
         return await lobby_menu(update, context)
     elif data == "lobby_info":

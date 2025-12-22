@@ -190,6 +190,7 @@ class LobbyManager:
                 "message": "Ошибка при присоединении к лобби",
             }
 
+
     def get_lobby_info(self, lobby_id: int) -> Optional[LobbyDTO]:
         """Получение полной информации о лобби"""
         # Информация о лобби
