@@ -12,4 +12,5 @@ class LobbyDTO:
     is_private: bool
     host_id: int
     invite_code: str
+    has_bots: bool
     players: List[Dict[str, Any]] = field(default_factory=list)

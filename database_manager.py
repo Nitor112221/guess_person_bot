@@ -49,6 +49,7 @@ class DatabaseManager:
                 max_players INTEGER DEFAULT 4,
                 current_players INTEGER DEFAULT 1,
                 is_private BOOLEAN DEFAULT FALSE,
+                has_bots BOOLEAN DEFAULT FALSE,
                 invite_code TEXT DEFAULT '',
                 host_id INTEGER
             )

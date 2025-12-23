@@ -69,7 +69,7 @@ class LobbyManager:
         self.db.cursor.execute(
             """
             SELECT lobby_id, status, created_at, max_players,
-                    current_players, is_private, host_id, invite_code
+                    current_players, is_private, host_id, invite_code, has_bots
             FROM lobbies
             WHERE invite_code = ?
             """,
@@ -92,6 +92,7 @@ class LobbyManager:
                         "is_private",
                         "host_id",
                         "invite_code",
+                        "has_bots",
                     ],
                     row,
                 )
@@ -198,7 +199,7 @@ class LobbyManager:
             """
             SELECT lobby_id, status, created_at, max_players,
                     current_players, is_private, host_id,
-                    invite_code
+                    invite_code, has_bots
             FROM lobbies
             WHERE lobby_id = ?
             """,
@@ -221,6 +222,7 @@ class LobbyManager:
                         "is_private",
                         "host_id",
                         "invite_code",
+                        "has_bots",
                     ],
                     row,
                 )
@@ -445,7 +447,7 @@ class LobbyManager:
             #     return {
             #         "success": False,
             #         "message": "Для начала игры нужно минимум 2 игрока",
-            #     }
+            #     }_
 
             # Меняем статус лобби
             self.db.cursor.execute(
@@ -468,3 +470,142 @@ class LobbyManager:
                 "error": str(e),
                 "message": "Ошибка при начале игры",
             }
+
+    def toggle_bots(self, lobby_id: int, host_id: int) -> Dict[str, Any]:
+        """Включение/выключение ботов в лобби"""
+        try:
+            # Проверяем, что пользователь является хостом
+            self.db.cursor.execute(
+                """
+                SELECT host_id, status, has_bots FROM lobbies WHERE lobby_id = ?
+                """,
+                (lobby_id,),
+            )
+
+            lobby_data = self.db.cursor.fetchone()
+            if not lobby_data:
+                return {"success": False, "message": "Лобби не найдено"}
+
+            current_host, status, current_bots_state = lobby_data
+
+            if current_host != host_id:
+                return {"success": False, "message": "Только хост может изменять настройки ботов"}
+
+            # Проверяем, что игра не запущена
+            if status == 'playing':
+                return {"success": False, "message": "Нельзя изменять настройки ботов во время игры"}
+
+            # Переключаем состояние
+            new_bots_state = not bool(current_bots_state)
+
+            self.db.cursor.execute(
+                """
+                UPDATE lobbies
+                SET has_bots = ?
+                WHERE lobby_id = ?
+                """,
+                (new_bots_state, lobby_id),
+            )
+            self.db._connection.commit()
+
+            return {
+                "success": True,
+                "has_bots": new_bots_state,
+                "message": f"Боты {'включены' if new_bots_state else 'выключены'}"
+            }
+
+        except Exception as e:
+            self.db._connection.rollback()
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Ошибка при изменении настроек ботов",
+            }
+
+    def add_bot_to_lobby(self, lobby_id: int) -> Dict[str, Any]:
+        """Добавление ботов в лобби"""
+        try:
+            # Получаем информацию о лобби
+            lobby_info = self.get_lobby_info(lobby_id)
+            if not lobby_info or not lobby_info.has_bots:
+                return {"success": False, "message": "Боты не включены в этом лобби"}
+
+            bot_count = len(list(filter(lambda x : x['user_id'] < 0, lobby_info.players)))
+
+            # Добавляем одного бота
+            bot_id = -(bot_count + 1)
+
+            self.db.cursor.execute(
+                """
+                INSERT INTO lobby_players (lobby_id, user_id)
+                VALUES (?, ?)
+                """,
+                (lobby_id, bot_id)
+            )
+
+            self.db.cursor.execute(
+                """
+                UPDATE lobbies
+                SET current_players = current_players + 1
+                WHERE lobby_id = ?
+                """,
+                (lobby_id,)
+            )
+
+            self.db._connection.commit()
+
+            return {
+                "success": True,
+                "message": "Бот добавлен в лобби",
+                "bot_id": bot_id
+            }
+
+        except Exception as e:
+            self.db._connection.rollback()
+            logger.error(f"Ошибка добавления бота: {e}")
+            return {"success": False, "message": f"Ошибка добавления бота: {str(e)}"}
+
+    def remove_bot_to_lobby(self, lobby_id: int) -> Dict[str, Any]:
+        """Удаление ботов в лобби"""
+        try:
+            # Получаем информацию о лобби
+            lobby_info = self.get_lobby_info(lobby_id)
+            if not lobby_info or lobby_info.has_bots:
+                return {"success": False, "message": "Боты включены включены в этом лобби"}
+
+            bots = list(filter(lambda x : x['user_id'] < 0, lobby_info.players))
+            if not bots:
+                return {
+                    "success": False,
+                    "message": "Боты в лобби не найдены",
+                }
+
+            self.db.cursor.execute(
+                """
+                DELETE FROM lobby_players
+                WHERE lobby_id = ? AND user_id = ?
+                """,
+                (lobby_id, bots[-1]['user_id'])
+            )
+
+            self.db.cursor.execute(
+                """
+                UPDATE lobbies
+                SET current_players = current_players - 1
+                WHERE lobby_id = ?
+                """,
+                (lobby_id,)
+            )
+
+            self.db._connection.commit()
+
+            return {
+                "success": True,
+                "message": "Бот удалён из лобби",
+                "bot_id": bots[-1]['user_id']
+            }
+
+        except Exception as e:
+            self.db._connection.rollback()
+            logger.error(f"Ошибка добавления бота: {e}")
+            return {"success": False, "message": f"Ошибка добавления бота: {str(e)}"}

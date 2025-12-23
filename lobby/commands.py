@@ -29,7 +29,7 @@ bot = Bot(token=os.getenv("BOT_TOKEN"))
 
 async def get_username_from_id(user_id: int):
     if user_id < 0:
-        return f"🤖 AI Bot {-user_id}"
+        return f"AI Bot {-user_id}"
 
     try:
         # Получаем информацию о чате по ID
@@ -333,7 +333,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = update.effective_user.id
-    # Находим лобби пользователя - ВЫНЕСЕНО В LobbyManager
+    # Находим лобби пользователя
     lobby_id = lobby_manager.get_user_lobby(user_id)
 
     if not lobby_id:
@@ -350,7 +350,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Формируем сообщение
     players_list = "\n".join(
         [
-            f"{'👑 ' if player['user_id'] == lobby_info.host_id else '👤 '}"
+            f"{'👑 ' if player['user_id'] == lobby_info.host_id else '👤 ' if player['user_id'] > 0 else '🤖 '}"
             f"{await get_username_from_id(player['user_id'])}"
             for i, player in enumerate(lobby_info.players)
         ]
@@ -361,6 +361,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🆔 ID: {lobby_info.lobby_id}\n"
         f"🔑 Код: <code>{lobby_info.invite_code}</code>\n"
         f"📊 Статус: {lobby_info.status}\n"
+        f"🤖 Боты: {'✅ Включены' if lobby_info.has_bots else '❌ Выключены'}\n"
         f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n\n"
         f"Список игроков:\n{players_list}"
     )
@@ -369,6 +370,7 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🆔 ID: {lobby_info.lobby_id}\n"
         f"🔑 Код: {lobby_info.invite_code}\n"
         f"📊 Статус: {lobby_info.status}\n"
+        f"🤖 Боты: {'✅ Включены' if lobby_info.has_bots else '❌ Выключены'}\n"
         f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n\n"
         f"Список игроков:\n{players_list}"
     )
@@ -384,6 +386,15 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             ]
         )
+
+    # Если пользователь хост и игра не запущена, добавляем кнопку управления ботами
+    if lobby_info.host_id == user_id and lobby_info.status != 'playing':
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{'❌ Выключить ботов' if lobby_info.has_bots else '🤖 Включить ботов'}",
+                callback_data=f"toggle_bots_{lobby_info.lobby_id}"
+            )
+        ])
 
     keyboard.append(
         [
@@ -594,6 +605,34 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
+async def toggle_bots(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Включение/выключение ботов в лобби"""
+    query = update.callback_query
+    await query.answer()
+
+    lobby_id = int(query.data.split("_")[-1])
+    user_id = update.effective_user.id
+
+    # Пытаемся переключить состояние ботов
+    result = lobby_manager.toggle_bots(lobby_id, user_id)
+
+    if result["success"]:
+        if result["has_bots"]:
+            lobby_manager.add_bot_to_lobby(lobby_id)
+        else:
+            lobby_manager.remove_bot_to_lobby(lobby_id)
+
+        # Обновляем информацию о лобби
+        await my_lobby_info(update, context)
+    else:
+        await query.edit_message_text(
+            f"❌ {result['message']}",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ Назад", callback_data="my_lobby")]]
+            ),
+        )
+
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик callback кнопок"""
     query = update.callback_query
@@ -608,6 +647,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await my_lobby_info(update, context)
     elif data == "leave_lobby":
         await leave_lobby(update, context)
+    elif data.startswith("toggle_bots_"):
+        await toggle_bots(update, context)
     elif data.startswith('start_'):
         await start_game(update, context)
     elif data.startswith("leave_"):

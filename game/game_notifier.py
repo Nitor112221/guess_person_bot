@@ -22,7 +22,7 @@ class GameNotifier:
             return self._username_cache[user_id]
 
         if user_id < 0:
-            return f"🤖 AI Bot {-user_id}"
+            return f"AI Bot {-user_id}"
 
         try:
             chat = await context.bot.get_chat(user_id)

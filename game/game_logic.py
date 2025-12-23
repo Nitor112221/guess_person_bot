@@ -87,7 +87,7 @@ class GameLogic:
         selected_roles = random.sample(all_roles, num_players)
         return selected_roles
 
-    def start_game_session(self, lobby_id: int, bot_count: int = 1) -> Dict[str, Any]:
+    def start_game_session(self, lobby_id: int) -> Dict[str, Any]:
         """Начинает игровую сессию"""
         try:
             # Получаем информацию о лобби
@@ -97,26 +97,6 @@ class GameLogic:
 
             num_players = lobby_info.current_players
             player_ids = [player['user_id'] for player in lobby_info.players]
-            for bot_index in range(1, bot_count + 1):
-                player_ids.append(-bot_index)
-                self.db.cursor.execute(
-                    """
-                    INSERT INTO lobby_players (lobby_id, user_id)
-                    VALUES (?, ?)
-                    """,
-                    (lobby_id, -bot_index)
-                )
-            self.db.cursor.execute(
-                """
-                UPDATE lobbies
-                SET current_players = current_players + ?
-                WHERE lobby_id = ?
-                """,
-                (bot_count, lobby_id,)
-            )
-            self.lobby_manager.db._connection.commit()
-
-            num_players = num_players + bot_count
 
             # Распределяем роли
             roles_list = self.distribute_roles(num_players)
@@ -385,6 +365,7 @@ class GameLogic:
     ):
         """Обработка хода бота"""
         bot = self.bots.get(game_state.lobby_id, {}).get(bot_id)
+        logger.info(f"AI bot {bot_id} turn")
         if not bot:
             logger.error(f"Бот {bot_id} не найден в лобби {game_state.lobby_id}")
             return
