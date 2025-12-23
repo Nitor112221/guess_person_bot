@@ -28,6 +28,9 @@ bot = Bot(token=os.getenv("BOT_TOKEN"))
 
 
 async def get_username_from_id(user_id: int):
+    if user_id < 0:
+        return f"🤖 AI Bot {-user_id}"
+
     try:
         # Получаем информацию о чате по ID
         chat = await bot.get_chat(user_id)
@@ -451,6 +454,15 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Leave_lobby_return result: {result}")
     if result["success"]:
         # Завершаем обработку выхода
+        if not result.get("game_processing_result", None):
+            await query.edit_message_text(
+                "✅ Вы вышли из лобби.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+                ),
+            )
+            return
+
         if result.get("game_processing_result", {}).get("needs_processing"):
             await lobby_manager.complete_player_exit(context, result)
 
@@ -538,6 +550,8 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Рассылаем правила игрокам через GameNotifier
     for player_id in game_state.get_all_players():
+        if player_id < 0:
+            continue
         # Получаем роли всех игроков, кроме текущего
         other_players_roles = {}
         for other_id in game_state.get_all_players():
@@ -571,7 +585,7 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     for player_id in game_state.get_all_players():
-        if player_id != first_player:
+        if player_id != first_player and player_id > 0:
             await game_logic.notifier.send_to_player(
                 context,
                 player_id,

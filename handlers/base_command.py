@@ -9,7 +9,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Привет, {user.first_name}! Добро пожаловать в игрового бота!\n\n"
         "Доступные команды:\n"
         "/lobby - Управление лобби\n"
-        "/history - История ваших вопросов (только во время игры)\n"
         "/help - Помощь"
     )
 

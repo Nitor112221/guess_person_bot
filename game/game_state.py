@@ -19,6 +19,7 @@ class PlayerData:
     role: str
     has_voted: bool = False
     questions_asked: int = 0
+    is_bot: bool = False
 
 
 @dataclass

@@ -440,11 +440,12 @@ class LobbyManager:
             )
 
             players_info = self.db.cursor.fetchone()
-            if players_info[0] < 2:  # Минимум 2 игрока для начала
-                return {
-                    "success": False,
-                    "message": "Для начала игры нужно минимум 2 игрока",
-                }
+            # TODO: с ботами переделать проверку
+            # if players_info[0] < 2: # Минимум 2 игрока для начала
+            #     return {
+            #         "success": False,
+            #         "message": "Для начала игры нужно минимум 2 игрока",
+            #     }
 
             # Меняем статус лобби
             self.db.cursor.execute(

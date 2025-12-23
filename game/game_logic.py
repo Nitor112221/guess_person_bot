@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from database_manager import DatabaseManager
+from game.bot_player import BotPlayer
 from game.game_state import GameState, GameStatus
 from game.game_manager import GameStorageManager
 from game.game_notifier import GameNotifier
@@ -20,14 +21,14 @@ class GameLogic:
     _instance: Optional['GameLogic'] = None
 
     def __new__(
-        cls, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
+            cls, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
     ):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(
-        self, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
+            self, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
     ):
         # Защита от повторной инициализации
         if hasattr(self, "_initialized"):
@@ -42,6 +43,8 @@ class GameLogic:
         self.lobby_manager = lobby_manager
         self.storage = GameStorageManager(db_manager)
         self.notifier = GameNotifier()
+
+        self.bots: Dict[int, Dict[int, BotPlayer]] = {}
 
         # для совместимости с текущим кодом
         self.active_games = self.storage.active_games
@@ -84,7 +87,7 @@ class GameLogic:
         selected_roles = random.sample(all_roles, num_players)
         return selected_roles
 
-    def start_game_session(self, lobby_id: int) -> Dict[str, Any]:
+    def start_game_session(self, lobby_id: int, bot_count: int = 1) -> Dict[str, Any]:
         """Начинает игровую сессию"""
         try:
             # Получаем информацию о лобби
@@ -94,6 +97,26 @@ class GameLogic:
 
             num_players = lobby_info.current_players
             player_ids = [player['user_id'] for player in lobby_info.players]
+            for bot_index in range(1, bot_count + 1):
+                player_ids.append(-bot_index)
+                self.db.cursor.execute(
+                    """
+                    INSERT INTO lobby_players (lobby_id, user_id)
+                    VALUES (?, ?)
+                    """,
+                    (lobby_id, -bot_index)
+                )
+            self.db.cursor.execute(
+                """
+                UPDATE lobbies
+                SET current_players = current_players + ?
+                WHERE lobby_id = ?
+                """,
+                (bot_count, lobby_id,)
+            )
+            self.lobby_manager.db._connection.commit()
+
+            num_players = num_players + bot_count
 
             # Распределяем роли
             roles_list = self.distribute_roles(num_players)
@@ -101,6 +124,13 @@ class GameLogic:
 
             # Создаем словарь player_id -> role
             roles_dict = dict(zip(player_ids, roles_list))
+
+            logger.info(roles_dict)
+
+            for player_id, role in roles_dict.items():
+                if player_id < 0:  # Это бот
+                    bot = self.create_bot_player(lobby_id, player_id, role)
+                    bot.assigned_role = role
 
             # Сохраняем роли в БД
             self.storage.save_player_roles(lobby_id, roles_dict)
@@ -178,17 +208,19 @@ class GameLogic:
             await update.message.reply_text(
                 "✅ Ваш вопрос отправлен другим игрокам!\n" "Ждем ответов..."
             )
+            # обрабатывает голоса ботов
+            await self.process_bot_votes(context, game_state, user_id, question, player_role)
         else:
             await update.message.reply_text(
                 "❌ Не удалось отправить вопрос. Попробуйте еще раз."
             )
 
     async def process_vote(
-        self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
-        lobby_id: int,
-        vote_type: str,
+            self,
+            update: Update,
+            context: ContextTypes.DEFAULT_TYPE,
+            lobby_id: int,
+            vote_type: str,
     ):
         """Обработка голоса"""
         query = update.callback_query
@@ -221,7 +253,7 @@ class GameLogic:
             await self.announce_results(context, game_state)
 
     async def announce_results(
-        self, context: ContextTypes.DEFAULT_TYPE, game_state: GameState
+            self, context: ContextTypes.DEFAULT_TYPE, game_state: GameState
     ):
         """Объявляет результаты голосования"""
         # Получаем результаты
@@ -259,15 +291,19 @@ class GameLogic:
         await self.notifier.send_vote_results(
             context, game_state, question, yes_votes, no_votes, majority_yes
         )
-        await self.notifier.send_turn_notification(context, game_state, player)
+        if player and player < 0:
+            self.bots[game_state.lobby_id][player].add_fact(question, majority_yes)
+            await self.process_bot_turn(context, game_state, player)
+        else:
+            await self.notifier.send_turn_notification(context, game_state, player)
 
     async def process_final_guess(
-        self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
-        game_state: GameState,
-        user_id: int,
-        guess: str,
+            self,
+            update: Update,
+            context: ContextTypes.DEFAULT_TYPE,
+            game_state: GameState,
+            user_id: int,
+            guess: str,
     ):
         """Обработка финальной догадки"""
         # Извлекаем предполагаемого персонажа
@@ -297,11 +333,11 @@ class GameLogic:
                 )
 
     async def end_game(
-        self,
-        context: ContextTypes.DEFAULT_TYPE,
-        game_state: GameState,
-        winner_id: int,
-        guessed: bool,
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            game_state: GameState,
+            winner_id: int,
+            guessed: bool,
     ):
         """Завершение игры"""
         if not guessed:
@@ -330,15 +366,133 @@ class GameLogic:
         # Очищаем историю вопросов
         self.storage.cleanup_game_history(game_state.lobby_id)
 
+        # Очищаем ботов для этого лобби
+        if game_state.lobby_id in self.bots:
+            del self.bots[game_state.lobby_id]
+
         # Удаляем состояние игры из памяти
         self.storage.remove_game(game_state.lobby_id)
 
         self.lobby_manager.db._connection.commit()
 
+    # ===== Обработка хода бота =====
+
+    async def process_bot_turn(
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            game_state: GameState,
+            bot_id: int
+    ):
+        """Обработка хода бота"""
+        bot = self.bots.get(game_state.lobby_id, {}).get(bot_id)
+        if not bot:
+            logger.error(f"Бот {bot_id} не найден в лобби {game_state.lobby_id}")
+            return
+
+        try:
+            # Бот задает вопрос
+            response = bot.ask()
+
+            if response.is_guess:
+                # Бот делает предположение
+                await self.process_bot_final_guess(
+                    context, game_state, bot_id, response.question
+                )
+            else:
+                # Бот задает обычный вопрос
+                question = response.question
+
+                # Сохраняем вопрос в историю
+                question_id = self.storage.save_question_history(
+                    game_state.lobby_id, bot_id, question
+                )
+
+                # Начинаем голосование
+                player_role = game_state.get_player_role(bot_id)
+                game_state.start_vote(question, bot_id)
+
+                # Рассылаем вопрос для голосования
+                success = await self.notifier.send_vote_question(
+                    context, game_state, bot_id, question, player_role
+                )
+
+                if success:
+                    # Автоматически голосуем за ботов (если они есть)
+                    await self.process_bot_votes(context, game_state, bot_id, question, player_role)
+
+        except Exception as e:
+            logger.error(f"Ошибка обработки хода бота {bot_id}: {e}")
+
+    async def process_bot_votes(
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            game_state: GameState,
+            asking_bot_id: int,
+            question: str,
+            target_role: str
+    ):
+        """Обработка голосования ботов"""
+        # Получаем всех игроков
+        for player_id in game_state.get_all_players():
+            if player_id == asking_bot_id:
+                continue  # Бот не голосует за свой вопрос
+
+            if player_id > 0:  # Это человек
+                continue
+
+            bot = self.bots.get(game_state.lobby_id, {}).get(player_id)
+            if bot:
+                # Бот отвечает на вопрос
+                answer = bot.ans_for_question(target_role, question)
+                vote_type = "yes" if answer else "no"
+
+                # Добавляем голос
+                game_state.add_vote(player_id, vote_type)
+
+        # Проверяем, все ли проголосовали
+        if game_state.is_voting_complete():
+            await self.announce_results(context, game_state)
+
+    async def process_bot_final_guess(
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            game_state: GameState,
+            bot_id: int,
+            guess: str
+    ):
+        """Обработка финальной догадки бота"""
+        # Извлекаем предполагаемого персонажа
+        guess_text = guess.strip().strip()
+        actual_role = game_state.get_player_role(bot_id)
+
+        if guess_text.lower() == actual_role.lower():
+            # Бот угадал!
+            await self.end_game(context, game_state, bot_id, True)
+        else:
+            # Бот не угадал
+            game_state.end_vote()
+            next_player = game_state.next_player()
+
+            if next_player:
+                # Уведомляем о неудачной попытке
+                await self.notifier.broadcast_to_game(
+                    context,
+                    game_state,
+                    f"🤖 AI Бот не угадал!\nХод переходит следующему игроку.",
+                )
+
+                # Проверяем, не бот ли следующий
+                if next_player < 0:
+                    await self.process_bot_turn(context, game_state, next_player)
+                else:
+                    await self.notifier.send_turn_notification(
+                        context, game_state, next_player
+                    )
+
     # ===== Управление игроками =====
 
     def prepare_player_exit(
-        self, lobby_id: int, exiting_player_id: int
+            self, lobby_id: int, exiting_player_id: int
     ) -> Dict[str, Any]:
         """Подготовка к выходу игрока: сбор информации до удаления"""
         game_state = self.storage.get_game(lobby_id)
@@ -376,9 +530,9 @@ class GameLogic:
 
         # Проверяем, голосовал ли игрок
         if (
-            game_state.status == GameStatus.VOTING
-            and game_state.current_vote
-            and exiting_player_id in game_state.current_vote.votes
+                game_state.status == GameStatus.VOTING
+                and game_state.current_vote
+                and exiting_player_id in game_state.current_vote.votes
         ):
             result["had_voted"] = True
 
@@ -386,11 +540,11 @@ class GameLogic:
         return result
 
     async def process_player_exit(
-        self,
-        context: ContextTypes.DEFAULT_TYPE,
-        lobby_id: int,
-        exiting_player_id: int,
-        exit_info: Dict[str, Any],
+            self,
+            context: ContextTypes.DEFAULT_TYPE,
+            lobby_id: int,
+            exiting_player_id: int,
+            exit_info: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Обработка выхода игрока после сбора информации"""
         game_state = self.storage.get_game(lobby_id)
@@ -433,6 +587,18 @@ class GameLogic:
         logger.info(f"Process_Player_exit result: {result}")
         return result
 
+    def create_bot_player(self, lobby_id: int, bot_index: int, role: str) -> BotPlayer:
+        """Создание бота-игрока"""
+        # Используем отрицательные ID для ботов
+        bot = BotPlayer(bot_index, role)
+
+        # Сохраняем бота в общем хранилище
+        if lobby_id not in self.bots:
+            self.bots[lobby_id] = {}
+        self.bots[lobby_id][bot_index] = bot
+
+        return bot
+
     # ===== Вспомогательные методы =====
 
     def get_current_player(self, lobby_id: int) -> Optional[int]:
@@ -441,7 +607,7 @@ class GameLogic:
         return game_state.get_current_player() if game_state else None
 
     async def get_question_history(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+            self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """Показывает историю вопросов пользователя"""
         user_id = update.effective_user.id

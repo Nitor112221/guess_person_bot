@@ -1,6 +1,6 @@
 from typing import Dict, Any, List, Optional
 import logging
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,9 @@ class GameNotifier:
         if user_id in self._username_cache:
             return self._username_cache[user_id]
 
+        if user_id < 0:
+            return f"🤖 AI Bot {-user_id}"
+
         try:
             chat = await context.bot.get_chat(user_id)
             username = f"@{chat.username}" if chat.username else f"Игрок {user_id}"
@@ -40,6 +43,10 @@ class GameNotifier:
         reply_markup: Optional[InlineKeyboardMarkup] = None,
     ) -> bool:
         """Отправка сообщения конкретному игроку"""
+
+        if user_id < 0:
+            return True
+
         try:
             await context.bot.send_message(
                 chat_id=user_id, text=text, reply_markup=reply_markup, parse_mode="HTML"
@@ -61,7 +68,7 @@ class GameNotifier:
         exclude_users = exclude_users or []
 
         for user_id in game_state.get_all_players():
-            if user_id in exclude_users:
+            if user_id in exclude_users or user_id < 0:
                 continue
 
             success = await self.send_to_player(context, user_id, text)
@@ -70,35 +77,6 @@ class GameNotifier:
         return results
 
     # ===== Игровые уведомления =====
-
-    async def send_role_notification(
-        self,
-        context: ContextTypes.DEFAULT_TYPE,
-        game_state,
-        user_id: int,
-        other_players_roles: Dict[int, str],
-    ) -> bool:
-        """Отправка игроку информации о ролях других игроков"""
-        try:
-            # Формируем список ролей других игроков
-            roles_text = "📋 Роли других игроков:\n"
-            for other_id, role in other_players_roles.items():
-                if other_id != user_id:
-                    username = await self.get_username(context, other_id)
-                    roles_text += f"👤 {username}: {role}\n"
-
-            message_text = (
-                "🎮 Игра началась!\n\n"
-                f"{roles_text}\n"
-                "❓ Ваша роль скрыта от вас!\n"
-                "Задавайте вопросы, чтобы угадать, кто вы!"
-            )
-
-            return await self.send_to_player(context, user_id, message_text)
-        except Exception as e:
-            logger.error(f"Ошибка отправки ролей: {e}")
-            return False
-
     async def send_game_rules(
         self,
         context: ContextTypes.DEFAULT_TYPE,
@@ -107,6 +85,9 @@ class GameNotifier:
         other_players_roles: Dict[int, str],
     ) -> bool:
         """Отправка правил игры"""
+        if user_id < 0:
+            return True
+
         try:
             # Формируем список ролей других игроков
             roles_text = "📋 Роли других игроков:\n"
@@ -167,12 +148,15 @@ class GameNotifier:
             # Отправляем всем, кроме спрашивающего
             success_count = 0
             for player_id in game_state.get_all_players():
-                if player_id != asking_player_id:
+                if player_id != asking_player_id and player_id > 0:
                     success = await self.send_to_player(
                         context, player_id, message_text, reply_markup
                     )
                     if success:
                         success_count += 1
+
+                if player_id < 0:
+                    success_count += 1
 
             return success_count > 0
         except Exception as e:
@@ -298,6 +282,9 @@ class GameNotifier:
         self, context: ContextTypes.DEFAULT_TYPE, game_state, player_id: int
     ) -> bool:
         """Уведомление о том, что ход перешел к игроку"""
+        if player_id < 0:
+            return True
+
         try:
             username = await self.get_username(context, player_id)
 
