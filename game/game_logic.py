@@ -614,16 +614,14 @@ class GameLogic:
         # Формируем сообщение
         history_text = "📝 История ваших вопросов в текущей игре:\n\n"
 
-        for i, item in enumerate(history, 1):
-            time_str = item["asked_at"][:16] if item["asked_at"] else "N/A"
-
+        for i, item in enumerate(history):
             if item["yes_votes"] is not None and item["no_votes"] is not None:
                 vote_result = f"✅{item['yes_votes']} ❌{item['no_votes']}"
             else:
                 vote_result = "⏳ Ожидает голосования"
 
-            history_text += f"{i}. {item['text']}\n"
-            history_text += f"   📅 {time_str} | {vote_result}\n\n"
+            history_text += f"{len(history) - i}. {item['text']}\n"
+            history_text += f"  {vote_result}\n\n"
 
         await update.message.reply_text(
             f"{history_text}\n" f"📊 Всего вопросов: {len(history)}"

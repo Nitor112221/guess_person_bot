@@ -138,40 +138,7 @@ async def create_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if result["success"]:
-        lobby_info = lobby_manager.get_lobby_info(result["lobby_id"])
-
-        message_text = (
-            f"✅ Лобби успешно создано!\n\n"
-            f"🆔 ID лобби: {lobby_info.lobby_id}\n"
-            f"🔑 Код приглашения: <code>{lobby_info.invite_code}</code>\n"
-            f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
-            f"👑 Хост: Вы\n\n"
-            f"Поделитесь кодом приглашения с друзьями!"
-        )
-
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
-                )
-            ],
-            [
-                InlineKeyboardButton("↩️ Назад в меню", callback_data="back_to_menu"),
-            ],
-            [
-                InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby"),
-            ],
-        ]
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            message_text, reply_markup=reply_markup, parse_mode="HTML"
-        )
+        await my_lobby_info(update, context)
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await query.edit_message_text(
@@ -284,29 +251,18 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
         message_text = (
-            f"✅ Вы успешно присоединились к лобби!\n\n"
-            f"🆔 ID лобби: {lobby_info.lobby_id}\n"
-            f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n"
-            f"👑 Хост: {await get_username_from_id(lobby_info.host_id)}\n\n"
+            "Вы успешно присоединились к лобби!\n"
+            f"🏠 Ваше лобби:\n\n"
+            f"🆔 ID: {lobby_info.lobby_id}\n"
+            f"🔑 Код: <code>{lobby_info.invite_code}</code>\n"
+            f"📊 Статус: {lobby_info.status}\n"
+            f"🤖 Боты: {'✅ Включены' if lobby_info.has_bots else '❌ Выключены'}\n"
+            f"👥 Игроков: {lobby_info.current_players}/{lobby_info.max_players}\n\n"
             f"Список игроков:\n{players_list}"
         )
 
         keyboard = []
-        if lobby_info.host_id == user_id:
-            keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        "🎮 Начать игру", callback_data=f"start_{lobby_info.lobby_id}"
-                    )
-                ]
-            )
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
-                )
-            ]
-        )
+        keyboard.append([InlineKeyboardButton("🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}")])
         keyboard.append(
             [InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]
         )
