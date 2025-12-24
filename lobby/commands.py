@@ -8,7 +8,7 @@ from telegram import Bot
 from telegram.error import TelegramError
 
 from ServiceController import ServiceContainer
-from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
+from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY, WAITING_FOR_THEME
 from handlers.base_command import cancel_leave
 
 logging.basicConfig(
@@ -460,14 +460,14 @@ async def confirm_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало игры"""
+    """Начало игры - первый шаг: подготовка"""
     query = update.callback_query
     await query.answer()
 
     lobby_id = int(query.data.split("_")[-1])
     user_id = update.effective_user.id
 
-    # Дополнительная проверка статуса перед началом игры
+    # Проверяем статус лобби
     lobby_info = lobby_manager.get_lobby_info(lobby_id)
     if lobby_info and lobby_info.status == 'playing':
         await query.edit_message_text(
@@ -476,10 +476,19 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
-        return
+        return ConversationHandler.END
 
-    # Пытаемся начать игру
-    result = lobby_manager.start_game(lobby_id, user_id)
+    if lobby_info and lobby_info.status == 'game_starting':
+        await query.edit_message_text(
+            "⏳ Игра уже готовится к запуску!",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return WAITING_FOR_THEME
+
+    # Подготавливаем игру (меняем статус на game_starting)
+    result = lobby_manager.start_game_prepare(lobby_id, user_id)
 
     if not result["success"]:
         logger.error(
@@ -491,30 +500,126 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
-        return
+        return ConversationHandler.END
+
+    # Отправляем сообщение с просьбой задать тему
+    message_text = (
+        "🎮 Подготовка к игре...\n\n"
+        "🎨 Хотите задать тему для персонажей?\n\n"
+        "Примеры тем:\n"
+        "• Герои Марвел\n"
+        "• Исторические личности\n"
+        "• Персонажи аниме\n"
+        "• Супергерои комиксов\n"
+        "• Известные ученые\n"
+        "• Литературные персонажи\n"
+        "• Персонажи видеоигр\n\n"
+        "📝 Напишите тему для ролей ИЛИ отправьте 'скип' для случайной генерации."
+    )
+
+    # Сохраняем lobby_id в контексте
+    context.user_data['starting_game_lobby'] = lobby_id
+
+    # Отправляем сообщение хосту
+    await query.edit_message_text(
+        message_text,
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_start_{lobby_id}")]]
+        ),
+    )
+
+    return WAITING_FOR_THEME
+
+
+async def process_game_theme(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка темы для игры от хоста"""
+    user_id = update.effective_user.id
+    lobby_id = context.user_data.get('starting_game_lobby')
+
+    if not lobby_id:
+        await update.message.reply_text(
+            "Произошла ошибка. Попробуйте начать игру заново.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return ConversationHandler.END
+
+    # Проверяем, что пользователь все еще хост
+    lobby_info = lobby_manager.get_lobby_info(lobby_id)
+    if not lobby_info or lobby_info.host_id != user_id:
+        await update.message.reply_text(
+            "❌ Только хост может настраивать игру!",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return ConversationHandler.END
+
+    theme = update.message.text.strip()
+
+    # Подтверждаем начало игры с темой
+    result = lobby_manager.confirm_start_game(lobby_id)
+
+    if not result["success"]:
+        await update.message.reply_text(
+            f"❌ {result['message']}",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+        return ConversationHandler.END
+
+    # Очищаем временные данные
+    if 'starting_game_lobby' in context.user_data:
+        del context.user_data['starting_game_lobby']
+
+    # Получаем тему (если была указана и не скип)
+    final_theme = None
+    if theme and theme.lower() not in ['скип', 'skip']:
+        final_theme = theme
+        lobby_manager.set_lobby_theme(lobby_id, theme)
 
     # Запускаем игровую сессию через GameLogic
-    game_result = game_logic.start_game_session(lobby_id)
+    game_result = game_logic.start_game_session(lobby_id, final_theme)
 
     if not game_result["success"]:
-        await query.edit_message_text(
+        await update.message.reply_text(
             f"❌ Ошибка начала игры: {game_result['message']}",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
-        return
+        return ConversationHandler.END
 
     # Получаем состояние игры
     game_state = game_logic.storage.get_game(lobby_id)
     if not game_state:
-        await query.edit_message_text(
+        await update.message.reply_text(
             "❌ Не удалось получить состояние игры",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
-        return
+        return ConversationHandler.END
+
+    # Уведомляем хоста об успешном запуске
+    if final_theme:
+        await update.message.reply_text(
+            f"✅ Игра начата с темой: {final_theme}!\n\n"
+            f"Сгенерировано {len(game_state.get_all_players())} персонажей.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+    else:
+        await update.message.reply_text(
+            f"✅ Игра начата!\n\n"
+            f"Сгенерировано {len(game_state.get_all_players())} случайных персонажей.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
 
     # Рассылаем правила игрокам через GameNotifier
     for player_id in game_state.get_all_players():
@@ -536,13 +641,13 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Получаем первого игрока
     first_player = game_state.get_current_player()
     if not first_player:
-        await query.edit_message_text(
+        await update.message.reply_text(
             "❌ Не удалось определить первого игрока",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
             ),
         )
-        return
+        return ConversationHandler.END
 
     # Отправляем уведомление первому игроку через GameNotifier
     await game_logic.notifier.send_turn_notification(context, game_state, first_player)
@@ -557,10 +662,13 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await game_logic.notifier.send_to_player(
                 context,
                 player_id,
-                f"🎮 Первый ход у: {first_player_username}\n"
+                f"🎮 Игра началась!\n"
+                f"Первый ход у: {first_player_username}\n"
                 "Ожидайте вопросов и будьте готовы голосовать!",
             )
 
+    return ConversationHandler.END
+# TODO: тут остановился
 
 async def toggle_bots(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Включение/выключение ботов в лобби"""

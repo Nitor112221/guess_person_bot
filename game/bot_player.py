@@ -6,15 +6,10 @@ from typing import List, Tuple, Dict, Any
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from ServiceController import ServiceContainer
+
 load_dotenv()
 YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
-YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
-# Инициализация клиента OpenAI с указанием базового URL
-client = OpenAI(
-    api_key=YANDEX_CLOUD_API_KEY,
-    base_url="https://llm.api.cloud.yandex.net/v1",
-    project=YANDEX_CLOUD_FOLDER
-)
 
 
 @dataclass
@@ -122,7 +117,7 @@ class BotPlayer:
                 },
                 "required": ["question", "is_guess"]
             }
-            response = client.chat.completions.create(
+            response = ServiceContainer().ai_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/latest",
                 messages=[
                     {"role": "system",
@@ -239,7 +234,7 @@ class BotPlayer:
 
         try:
             # Отправляем запрос к модели Mistral через OpenRouter
-            response = client.chat.completions.create(
+            response = ServiceContainer().ai_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/qwen3-235b-a22b-fp8/latest",  # Используем доступную модель Mistral
                 messages=[
                     {"role": "system",

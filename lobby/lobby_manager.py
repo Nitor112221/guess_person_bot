@@ -418,19 +418,24 @@ class LobbyManager:
             "notifications_sent": True,
         }
 
-    def start_game(self, lobby_id: int, host_id: int) -> Dict[str, Any]:
-        """Начало игры"""
+    def start_game_prepare(self, lobby_id: int, host_id: int) -> Dict[str, Any]:
+        """Подготовка к началу игры - изменение статуса на game_starting"""
         try:
             # Проверяем, что пользователь является хостом
             self.db.cursor.execute(
                 """
-                SELECT host_id FROM lobbies WHERE lobby_id = ?
+                SELECT host_id, status FROM lobbies WHERE lobby_id = ?
                 """,
                 (lobby_id,),
             )
 
-            current_host = self.db.cursor.fetchone()
-            if not current_host or current_host[0] != host_id:
+            lobby_data = self.db.cursor.fetchone()
+            if not lobby_data:
+                return {"success": False, "message": "Лобби не найдено"}
+
+            current_host, status = lobby_data
+
+            if current_host != host_id:
                 return {"success": False, "message": "Только хост может начать игру"}
 
             # Проверяем минимальное количество игроков
@@ -442,13 +447,38 @@ class LobbyManager:
             )
 
             players_info = self.db.cursor.fetchone()
-            if players_info[0] < 2: # Минимум 2 игрока для начала
+            if players_info[0] < 2:  # Минимум 2 игрока для начала
                 return {
                     "success": False,
                     "message": "Для начала игры нужно минимум 2 игрока",
                 }
 
-            # Меняем статус лобби
+            # Меняем статус лобби на game_starting
+            self.db.cursor.execute(
+                """
+                UPDATE lobbies
+                SET status = 'game_starting'
+                WHERE lobby_id = ?
+                """,
+                (lobby_id,),
+            )
+
+            self.db._connection.commit()
+
+            return {"success": True, "message": "Настройка темы игры"}
+
+        except Exception as e:
+            self.db._connection.rollback()
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "Ошибка при подготовке игры",
+            }
+
+    def confirm_start_game(self, lobby_id: int) -> Dict[str, Any]:
+        """Подтверждение начала игры с темой"""
+        try:
+            # Меняем статус лобби на playing
             self.db.cursor.execute(
                 """
                 UPDATE lobbies
@@ -460,7 +490,10 @@ class LobbyManager:
 
             self.db._connection.commit()
 
-            return {"success": True, "message": "Игра начата"}
+            return {
+                "success": True,
+                "message": "Игра начата"
+            }
 
         except Exception as e:
             self.db._connection.rollback()

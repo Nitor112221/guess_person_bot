@@ -5,10 +5,10 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ServiceController import ServiceContainer
 from database_manager import DatabaseManager
 from game.bot_player import BotPlayer
 from game.game_state import GameState, GameStatus
@@ -17,15 +17,8 @@ from game.game_notifier import GameNotifier
 from lobby.lobby_manager import LobbyManager
 
 logger = logging.getLogger(__name__)
+
 load_dotenv()
-YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
-YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
-# Инициализация клиента OpenAI с указанием базового URL
-client = OpenAI(
-    api_key=YANDEX_CLOUD_API_KEY,
-    base_url="https://llm.api.cloud.yandex.net/v1",
-    project=YANDEX_CLOUD_FOLDER
-)
 
 class GameLogic:
     """Основная игровая логика - координация всех компонентов"""
@@ -131,7 +124,8 @@ class GameLogic:
             }
 
             # Отправка запроса к YandexGPT
-            response = client.chat.completions.create(
+            YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
+            response = ServiceContainer().ai_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/latest",
                 messages=[
                     {"role": "system",
