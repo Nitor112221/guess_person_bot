@@ -1,4 +1,3 @@
-import random
 from dataclasses import dataclass
 import json
 import os
@@ -95,10 +94,7 @@ class BotPlayer:
         if self.history:
             prompt += "\n\n**ИСТОРИЯ ПРЕДЫДУЩИХ ВОПРОСОВ И ОТВЕТОВ:**\n"
             for i, (question, answer) in enumerate(self.history, 1):
-                # Проверяем, начинается ли вопрос с правильной фразы
-                if not question.startswith("Мой персонаж") and not question.startswith("Я "):
-                    question = f"Мой персонаж {question.lower()}"
-                prompt += f"{i}. Вопрос: {question}\n   Ответ: {answer}\n"
+                prompt += f"{i}. Вопрос: {question}\n   Ответ, который ты получал: {answer}\n"
 
             # Добавляем анализ эффективности
             prompt += "\n**АНАЛИЗ ИСТОРИИ И СТРАТЕГИЧЕСКИЕ ВЫВОДЫ:**\n"
@@ -215,17 +211,9 @@ class BotPlayer:
                 "is_guess": 0
             })
 
-    def ans_for_question(self, question: str, role: str) -> bool:
+    def ans_for_question(self, role: str, question: str) -> bool:
         """
         Ответ нейросети на вопрос пользователя о загаданном персонаже.
-
-        Args:
-            question: Вопрос пользователя, на который можно ответить "да" или "нет"
-            role: Загаданный персонаж пользователя
-
-        Returns:
-            True - если ответ на вопрос "да"
-            False - если ответ на вопрос "нет"
         """
 
         # Формируем промпт для нейросети
