@@ -269,7 +269,7 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
         keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(message_text, reply_markup=reply_markup)
+        await update.message.reply_text(message_text, reply_markup=reply_markup, parse_mode="HTML")
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await update.message.reply_text(
