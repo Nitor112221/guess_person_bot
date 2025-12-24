@@ -1,7 +1,11 @@
 import json
+import os
 import random
 import logging
 from typing import Dict, Any, Optional, List
+
+from dotenv import load_dotenv
+from openai import OpenAI
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -13,7 +17,15 @@ from game.game_notifier import GameNotifier
 from lobby.lobby_manager import LobbyManager
 
 logger = logging.getLogger(__name__)
-
+load_dotenv()
+YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
+YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
+# Инициализация клиента OpenAI с указанием базового URL
+client = OpenAI(
+    api_key=YANDEX_CLOUD_API_KEY,
+    base_url="https://llm.api.cloud.yandex.net/v1",
+    project=YANDEX_CLOUD_FOLDER
+)
 
 class GameLogic:
     """Основная игровая логика - координация всех компонентов"""
@@ -52,8 +64,109 @@ class GameLogic:
         self._initialized = True
 
     # ===== Инициализация игры =====
+    def load_roles(self, num_players: int) -> List[str]:
+        """
+        Генерирует список персонажей для игры "Угадай кто я" через YandexGPT API.
+        """
 
-    def load_roles(self) -> List[str]:
+        prompt = f"""Ты должен сгенерировать список из {num_players} уникальных персонажей для игры "Угадай кто я".
+
+        **ТРЕБОВАНИЯ К ПЕРСОНАЖАМ:**
+        1. Персонажи должны быть РАЗНООБРАЗНЫМИ по категориям (фильмы, игры, история, комиксы, мультфильмы, мифология, наука)
+        2. Каждый персонаж должен быть ДОСТАТОЧНО ИЗВЕСТНЫМ, чтобы другие игроки могли его угадывать
+        3. Избегай редких или нишевых персонажей
+        4. Балансируй между реальными историческими личностями и вымышленными персонажами
+        5. Из профессиональных сфер, таких как история, игры, наука, мифология бери только самых популярный персонажей, которых знаю все.
+        6. Нельзя брать персонажей, которые известны одному кругу людей - писателей не классики, или учёных, в одной области. Таких персонажей как Эйнштейн или Пушкин брать можно.
+        7. БЕРИ ТОЛЬКО СУПЕР ПОПУЛЯРНЫХ ПЕРСОНАЖЕЙ, ЧТОБЫ ДАЖЕ ЛЮДИ С НЕБОЛЬШИМ КРУГОЗОРОМ МОГЛИ ЕГО ОТГАДАТЬ 
+        **ФОРМАТ ВЫВОДА:**
+        Верни ТОЛЬКО JSON объект, соответствующий структуре:
+        {{
+            "type": "object",
+            "properties": {{
+                "characters": {{
+                    "type": "array",
+                    "items": {{
+                        "type": "string",
+                        "description": "Имя персонажа для игры 'Угадай кто я'"
+                    }},
+                    "minItems": num_players,
+                    "maxItems": num_players
+                }}
+            }}
+        }}
+
+        **ПРИМЕРЫ ПЕРСОНАЖЕЙ:**
+        - Вымышленные: Гарри Поттер, Супермен, Марио, Шерлок Холмс, Золушка, Дарт Вейдер, Пикачу, Эльза
+        - Реальные: Альберт Эйнштейн, Клеопатра, Наполеон Бонапарт, Леонардо да Винчи, Махатма Ганди, Билл Гейтс
+        - Мифологические: Зевс, Тор, Анубис, Одиссей, Цербер
+
+        **ВАЖНОЕ ПРАВИЛО БАЛАНСА:**
+        - Примерно 70% вымышленных и 30% реальных персонажей
+        - Разные временные периоды (древность, средневековье, современность)
+        - Разные сферы деятельности (наука, искусство, развлечения)
+
+        **НЕЛЬЗЯ:**
+        1. Повторять персонажей из одной и той же вселенной в одном списке (нельзя и Гарри Поттера, и Гермиону)
+        2. Использовать слишком сложных или малоизвестных персонажей
+        3. Использовать однотипных персонажей (например, только супергероев)
+
+        Сгенерируй {num_players} разнообразных и интересных персонажей для игры.
+        """
+
+        try:
+            json_schema = {
+                "type": "object",
+                "properties": {
+                    "characters": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "description": "Имя персонажа для игры 'Угадай кто я'"
+                        },
+                        "minItems": num_players,
+                        "maxItems": num_players
+                    }
+                }
+            }
+
+            # Отправка запроса к YandexGPT
+            response = client.chat.completions.create(
+                model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/latest",
+                messages=[
+                    {"role": "system",
+                     "content": "Ты - генератор персонажей для игры 'Угадай кто я'. Твоя задача - создавать разнообразные, интересные и достаточно известные персонажи из разных категорий."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=1,
+                max_tokens=1000,
+                stream=False,
+                response_format={"type": "json_schema", "json_schema": json_schema}
+            )
+
+            # Извлечение JSON из ответа
+            response_text = response.choices[0].message.content.strip()
+
+            characters = json.loads(response_text)["characters"]
+
+            # Проверяем, что получили правильное количество персонажей
+            if len(characters) != num_players:
+                logger.warning(f"Предупреждение: получено {len(characters)} персонажей вместо {num_players}")
+                # Догенерируем недостающих персонажей локально
+                if len(characters) < num_players:
+                    characters += random.sample(self._generate_backup_characters(), num_players - len(characters))
+                else:
+                    characters = characters[:num_players]
+
+            return characters
+
+        except Exception as e:
+            logger.error(f"Ошибка при генерации персонажей через API: {e}")
+            logger.info("Используем резервный список персонажей...")
+            return random.sample(self._generate_backup_characters(), num_players)
+
+
+    def _generate_backup_characters(self) -> List[str]:
         """Загрузка ролей из файла"""
         try:
             with open('data/roles.json', 'r', encoding='utf-8') as f:
@@ -66,8 +179,20 @@ class GameLogic:
                 "Шерлок Холмс",
                 "Супермен",
                 "Человек-паук",
+                "Дарт Вейдер",
+                "Эльза",
+                "Марио",
+                "Сонька Золотая Ручка",
                 "Бэтмен",
+                "Черепашка-ниндзя",
                 "Джеймс Бонд",
+                "Индиана Джонс",
+                "Джокер",
+                "Халк",
+                "Терминатор",
+                "Нео",
+                "Фродо Бэггинс",
+                "Ариадна"
             ]
         except json.JSONDecodeError:
             logger.error("Ошибка чтения roles.json")
@@ -75,7 +200,7 @@ class GameLogic:
 
     def distribute_roles(self, num_players: int) -> List[str]:
         """Распределение ролей между игроками"""
-        all_roles = self.load_roles()
+        all_roles = self.load_roles(num_players)
 
         if len(all_roles) < num_players:
             logger.warning(
