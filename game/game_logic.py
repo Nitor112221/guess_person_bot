@@ -258,6 +258,9 @@ class GameLogic:
         # Определяем результат
         majority_yes = yes_votes > no_votes
 
+        # если вопрос задавал бот, то добавим это в его историю
+        if game_state.get_current_player() < 0:
+            self.bots[game_state.lobby_id][game_state.get_current_player()].add_fact(question, majority_yes)
         # Обрабатываем результат
         game_state.end_vote()
         if majority_yes:
@@ -272,7 +275,6 @@ class GameLogic:
             context, game_state, question, yes_votes, no_votes, majority_yes
         )
         if player and player < 0:
-            self.bots[game_state.lobby_id][player].add_fact(question, majority_yes)
             await self.process_bot_turn(context, game_state, player)
         else:
             await self.notifier.send_turn_notification(context, game_state, player)
@@ -304,6 +306,7 @@ class GameLogic:
                     context,
                     game_state,
                     f"❌ {await self.notifier.get_username(context, user_id)} не угадал(а)!\n"
+                    f"Он(а) не {guess_text}\n"
                     f"Ход переходит следующему игроку.",
                 )
 
@@ -443,7 +446,7 @@ class GameLogic:
     ):
         """Обработка финальной догадки бота"""
         # Извлекаем предполагаемого персонажа
-        guess_text = guess.strip().strip()
+        guess_text = guess.strip()[2:][:-1].strip()
         actual_role = game_state.get_player_role(bot_id)
 
         if guess_text.lower() == actual_role.lower():
@@ -459,7 +462,7 @@ class GameLogic:
                 await self.notifier.broadcast_to_game(
                     context,
                     game_state,
-                    f"🤖 AI Бот не угадал!\nХод переходит следующему игроку.",
+                    f"🤖 AI Бот не {guess_text}!\nХод переходит следующему игроку.",
                 )
 
                 # Проверяем, не бот ли следующий
