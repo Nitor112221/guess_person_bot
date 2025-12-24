@@ -15,7 +15,7 @@ from telegram.ext import (
 
 from ServiceController import ServiceContainer
 from config import SELECTING_ACTION, JOINING_LOBBY
-from handlers.base_command import cancel, start, help_command
+from handlers.base_command import cancel, start, help_command, leave
 from lobby.commands import button_callback, process_invite_code, lobby_menu
 
 load_dotenv()
@@ -44,6 +44,7 @@ def main() -> None:
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("leave", leave))
     application.add_handler(CommandHandler("lobby", lobby_menu))
 
     application.add_handler(CommandHandler("history", game_logic.get_question_history))

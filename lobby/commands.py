@@ -9,6 +9,7 @@ from telegram.error import TelegramError
 
 from ServiceController import ServiceContainer
 from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY
+from handlers.base_command import cancel_leave
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -620,6 +621,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await game_logic.process_vote(update, context, lobby_id, vote_type)
     elif data == "back_to_menu":
         return await lobby_menu(update, context)
+    elif data == "cancel_leave":
+        await cancel_leave(update, context)
     elif data == "lobby_info":
         await my_lobby_info(update, context)
     else:
