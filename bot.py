@@ -16,7 +16,12 @@ from telegram.ext import (
 from ServiceController import ServiceContainer
 from config import SELECTING_ACTION, JOINING_LOBBY, WAITING_FOR_THEME
 from handlers.base_command import cancel, start, help_command, leave
-from lobby.commands import button_callback, process_invite_code, lobby_menu, process_game_theme
+from lobby.commands import (
+    button_callback,
+    process_invite_code,
+    lobby_menu,
+    process_game_theme,
+)
 
 load_dotenv()
 # Берем из переменных окружения (безопасно!)
@@ -24,8 +29,9 @@ BOT_TOKEN: Optional[str] = os.getenv("BOT_TOKEN")
 
 # Включаем логирование
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO,
-    filename="logs.log"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+    filename="logs.log",
 )
 logging.getLogger('httpx').setLevel(logging.WARNING)  # убираем лишние логи
 logger = logging.getLogger(__name__)

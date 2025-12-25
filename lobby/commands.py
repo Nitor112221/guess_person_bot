@@ -260,14 +260,22 @@ async def process_invite_code(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
         keyboard = []
-        keyboard.append([InlineKeyboardButton("🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}")])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "🚪 Выйти", callback_data=f"leave_{lobby_info.lobby_id}"
+                )
+            ]
+        )
         keyboard.append(
             [InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]
         )
         keyboard.append([InlineKeyboardButton("🔄 Обновить", callback_data="my_lobby")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(message_text, reply_markup=reply_markup, parse_mode="HTML")
+        await update.message.reply_text(
+            message_text, reply_markup=reply_markup, parse_mode="HTML"
+        )
     else:
         logger.error(f"Error: {result.get('error', None)} Message: {result['message']}")
         await update.message.reply_text(
@@ -343,12 +351,14 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Если пользователь хост и игра не запущена, добавляем кнопку управления ботами
     if lobby_info.host_id == user_id and lobby_info.status != 'playing':
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{'❌ Выключить ботов' if lobby_info.has_bots else '🤖 Включить ботов'}",
-                callback_data=f"toggle_bots_{lobby_info.lobby_id}"
-            )
-        ])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{'❌ Выключить ботов' if lobby_info.has_bots else '🤖 Включить ботов'}",
+                    callback_data=f"toggle_bots_{lobby_info.lobby_id}",
+                )
+            ]
+        )
 
     keyboard.append(
         [
@@ -520,7 +530,13 @@ async def start_game(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         message_text,
         reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_start_{lobby_id}")]]
+            [
+                [
+                    InlineKeyboardButton(
+                        "❌ Отменить", callback_data=f"cancel_start_{lobby_id}"
+                    )
+                ]
+            ]
         ),
     )
 

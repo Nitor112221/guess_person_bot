@@ -62,9 +62,7 @@ async def leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lobby_id = lobby_manager.get_user_lobby(user_id)
 
         if not lobby_id:
-            await update.message.reply_text(
-                "❌ Вы не находитесь ни в одном лобби."
-            )
+            await update.message.reply_text("❌ Вы не находитесь ни в одном лобби.")
             return
 
         # Получаем информацию о лобби для подтверждения
@@ -89,8 +87,7 @@ async def leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(
-            message_text,
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            message_text, reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     except Exception as e:
@@ -117,6 +114,4 @@ async def cancel_leave(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    await query.edit_message_text(
-        "✅ Выход отменен. Вы остаетесь в лобби."
-    )
+    await query.edit_message_text("✅ Выход отменен. Вы остаетесь в лобби.")

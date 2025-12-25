@@ -12,7 +12,7 @@ YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 AI_client = OpenAI(
     api_key=YANDEX_CLOUD_API_KEY,
     base_url="https://llm.api.cloud.yandex.net/v1",
-    project=YANDEX_CLOUD_FOLDER
+    project=YANDEX_CLOUD_FOLDER,
 )
 
 
@@ -115,23 +115,30 @@ class BotPlayer:
             json_schema = {
                 "type": "object",
                 "properties": {
-                    "question": {"type": "string", "description": "Вопрос или предположение о персонаже"},
-                    "is_guess": {"type": "integer",
-                                 "description": "0 - если задается вопрос, 1 - если пытается угадать"},
+                    "question": {
+                        "type": "string",
+                        "description": "Вопрос или предположение о персонаже",
+                    },
+                    "is_guess": {
+                        "type": "integer",
+                        "description": "0 - если задается вопрос, 1 - если пытается угадать",
+                    },
                 },
-                "required": ["question", "is_guess"]
+                "required": ["question", "is_guess"],
             }
             response = AI_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/latest",
                 messages=[
-                    {"role": "system",
-                     "content": "Ты - стратегический игрок в игре 'Угадай персонажа'. Твоя главная задача - тщательно анализировать историю предыдущих вопросов и ответов. Каждое твое решение должно основываться на анализе всей накопленной информации. Используй стратегию бинарного поиска, группировки и логических выводов из истории."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "Ты - стратегический игрок в игре 'Угадай персонажа'. Твоя главная задача - тщательно анализировать историю предыдущих вопросов и ответов. Каждое твое решение должно основываться на анализе всей накопленной информации. Используй стратегию бинарного поиска, группировки и логических выводов из истории.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.9,
                 max_tokens=350,  # Увеличил лимит для более сложных аналитических вопросов
                 stream=False,
-                response_format={"type": "json_schema", "json_schema": json_schema}
+                response_format={"type": "json_schema", "json_schema": json_schema},
             )
 
             # Извлечение текста ответа
@@ -146,16 +153,15 @@ class BotPlayer:
                 result = json.loads(json_str)
             else:
                 # Если не удалось найти JSON, создаём стандартный вопрос
-                result = {
-                    "question": "Мой персонаж мужского пола?",
-                    "is_guess": 0
-                }
+                result = {"question": "Мой персонаж мужского пола?", "is_guess": 0}
 
             # Проверка и корректировка формата
             question_text = result.get("question", "").strip()
 
             # Определяем, является ли это попыткой угадать
-            is_guess_attempt = question_text.startswith("Я ") and question_text.endswith("!")
+            is_guess_attempt = question_text.startswith(
+                "Я "
+            ) and question_text.endswith("!")
 
             # Синхронизируем is_guess с форматом вопроса
             if is_guess_attempt:
@@ -185,10 +191,9 @@ class BotPlayer:
         except Exception as e:
             # В случае ошибки возвращаем стандартный вопрос
             print(f"Ошибка при обращении к API: {e}")
-            return ResponseQuestion(**{
-                "question": "Мой персонаж мужского пола?",
-                "is_guess": 0
-            })
+            return ResponseQuestion(
+                **{"question": "Мой персонаж мужского пола?", "is_guess": 0}
+            )
 
     def ans_for_question(self, role: str, question: str) -> bool:
         """
@@ -241,9 +246,11 @@ class BotPlayer:
             response = AI_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/qwen3-235b-a22b-fp8/latest",  # Используем доступную модель Mistral
                 messages=[
-                    {"role": "system",
-                     "content": f"Ты - ассистент в игре 'Угадай персонажа'. Твоя задача - точно отвечать на вопросы о персонаже {role}. Для группированных вопросов: если хотя бы одно утверждение верно для персонажа, отвечай 'да', иначе 'нет'."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": f"Ты - ассистент в игре 'Угадай персонажа'. Твоя задача - точно отвечать на вопросы о персонаже {role}. Для группированных вопросов: если хотя бы одно утверждение верно для персонажа, отвечай 'да', иначе 'нет'.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0,  # Низкая температура для более детерминированных ответов
                 max_tokens=10,  # Ограничиваем длину ответа
@@ -259,9 +266,15 @@ class BotPlayer:
                 return False
             else:
                 # Если ответ не распознан, пытаемся найти ключевые слова
-                if any(word in answer_text for word in ['yes', 'true', 'верно', 'правильно', 'correct']):
+                if any(
+                    word in answer_text
+                    for word in ['yes', 'true', 'верно', 'правильно', 'correct']
+                ):
                     return True
-                elif any(word in answer_text for word in ['no', 'false', 'неверно', 'неправильно', 'incorrect']):
+                elif any(
+                    word in answer_text
+                    for word in ['no', 'false', 'неверно', 'неправильно', 'incorrect']
+                ):
                     return False
                 else:
                     # По умолчанию возвращаем False при неоднозначном ответе
@@ -283,5 +296,5 @@ class BotPlayer:
             "id": self.id,
             "role": self.assigned_role,
             "history": self.history,
-            "is_bot": True
+            "is_bot": True,
         }

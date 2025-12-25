@@ -24,7 +24,7 @@ YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
 AI_client = OpenAI(
     api_key=YANDEX_CLOUD_API_KEY,
     base_url="https://llm.api.cloud.yandex.net/v1",
-    project=YANDEX_CLOUD_FOLDER
+    project=YANDEX_CLOUD_FOLDER,
 )
 
 
@@ -34,14 +34,14 @@ class GameLogic:
     _instance: Optional['GameLogic'] = None
 
     def __new__(
-            cls, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
+        cls, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
     ):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(
-            self, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
+        self, db_manager: DatabaseManager = None, lobby_manager: LobbyManager = None
     ):
         # Защита от повторной инициализации
         if hasattr(self, "_initialized"):
@@ -133,26 +133,28 @@ class GameLogic:
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "description": "Имя персонажа для игры 'Угадай кто я'"
+                            "description": "Имя персонажа для игры 'Угадай кто я'",
                         },
                         "minItems": num_players,
-                        "maxItems": num_players
+                        "maxItems": num_players,
                     }
-                }
+                },
             }
 
             # Отправка запроса к YandexGPT
             response = AI_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/latest",
                 messages=[
-                    {"role": "system",
-                     "content": "Ты - генератор персонажей для игры 'Угадай кто я'. Твоя задача - создавать разнообразные, интересные и достаточно известные персонажи из разных категорий."},
-                    {"role": "user", "content": prompt}
+                    {
+                        "role": "system",
+                        "content": "Ты - генератор персонажей для игры 'Угадай кто я'. Твоя задача - создавать разнообразные, интересные и достаточно известные персонажи из разных категорий.",
+                    },
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=1,
                 max_tokens=1000,
                 stream=False,
-                response_format={"type": "json_schema", "json_schema": json_schema}
+                response_format={"type": "json_schema", "json_schema": json_schema},
             )
 
             # Извлечение JSON из ответа
@@ -162,10 +164,15 @@ class GameLogic:
 
             # Проверяем, что получили правильное количество персонажей
             if len(characters) != num_players:
-                logger.warning(f"Предупреждение: получено {len(characters)} персонажей вместо {num_players}")
+                logger.warning(
+                    f"Предупреждение: получено {len(characters)} персонажей вместо {num_players}"
+                )
                 # Догенерируем недостающих персонажей локально
                 if len(characters) < num_players:
-                    characters += random.sample(self._generate_backup_characters(), num_players - len(characters))
+                    characters += random.sample(
+                        self._generate_backup_characters(),
+                        num_players - len(characters),
+                    )
                 else:
                     characters = characters[:num_players]
 
@@ -175,7 +182,6 @@ class GameLogic:
             logger.error(f"Ошибка при генерации персонажей через API: {e}")
             logger.info("Используем резервный список персонажей...")
             return random.sample(self._generate_backup_characters(), num_players)
-
 
     def _generate_backup_characters(self) -> List[str]:
         """Загрузка ролей из файла"""
@@ -203,7 +209,7 @@ class GameLogic:
                 "Терминатор",
                 "Нео",
                 "Фродо Бэггинс",
-                "Ариадна"
+                "Ариадна",
             ]
         except json.JSONDecodeError:
             logger.error("Ошибка чтения roles.json")
@@ -329,18 +335,20 @@ class GameLogic:
                 "✅ Ваш вопрос отправлен другим игрокам!\n" "Ждем ответов..."
             )
             # обрабатывает голоса ботов
-            await self.process_bot_votes(context, game_state, user_id, question, player_role)
+            await self.process_bot_votes(
+                context, game_state, user_id, question, player_role
+            )
         else:
             await update.message.reply_text(
                 "❌ Не удалось отправить вопрос. Попробуйте еще раз."
             )
 
     async def process_vote(
-            self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
-            lobby_id: int,
-            vote_type: str,
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        vote_type: str,
     ):
         """Обработка голоса"""
         query = update.callback_query
@@ -373,7 +381,7 @@ class GameLogic:
             await self.announce_results(context, game_state)
 
     async def announce_results(
-            self, context: ContextTypes.DEFAULT_TYPE, game_state: GameState
+        self, context: ContextTypes.DEFAULT_TYPE, game_state: GameState
     ):
         """Объявляет результаты голосования"""
         # Получаем результаты
@@ -400,7 +408,9 @@ class GameLogic:
 
         # если вопрос задавал бот, то добавим это в его историю
         if game_state.get_current_player() < 0:
-            self.bots[game_state.lobby_id][game_state.get_current_player()].add_fact(question, majority_yes)
+            self.bots[game_state.lobby_id][game_state.get_current_player()].add_fact(
+                question, majority_yes
+            )
         # Обрабатываем результат
         game_state.end_vote()
         if majority_yes:
@@ -420,12 +430,12 @@ class GameLogic:
             await self.notifier.send_turn_notification(context, game_state, player)
 
     async def process_final_guess(
-            self,
-            update: Update,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            user_id: int,
-            guess: str,
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state: GameState,
+        user_id: int,
+        guess: str,
     ):
         """Обработка финальной догадки"""
         # Извлекаем предполагаемого персонажа
@@ -451,16 +461,17 @@ class GameLogic:
                 )
 
                 # Передаем ход следующему
-                await self.notifier.send_turn_notification(
-                    context, game_state, next_player
-                )
+                if next_player and next_player < 0:
+                    await self.process_bot_turn(context, game_state, next_player)
+                else:
+                    await self.notifier.send_turn_notification(context, game_state, next_player)
 
     async def end_game(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            winner_id: int,
-            guessed: bool,
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state: GameState,
+        winner_id: int,
+        guessed: bool,
     ):
         """Завершение игры"""
         if not guessed:
@@ -501,10 +512,7 @@ class GameLogic:
     # ===== Обработка хода бота =====
 
     async def process_bot_turn(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            bot_id: int
+        self, context: ContextTypes.DEFAULT_TYPE, game_state: GameState, bot_id: int
     ):
         """Обработка хода бота"""
         bot = self.bots.get(game_state.lobby_id, {}).get(bot_id)
@@ -542,18 +550,20 @@ class GameLogic:
 
                 if success:
                     # Автоматически голосуем за ботов (если они есть)
-                    await self.process_bot_votes(context, game_state, bot_id, question, player_role)
+                    await self.process_bot_votes(
+                        context, game_state, bot_id, question, player_role
+                    )
 
         except Exception as e:
             logger.error(f"Ошибка обработки хода бота {bot_id}: {e}")
 
     async def process_bot_votes(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            asking_bot_id: int,
-            question: str,
-            target_role: str
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state: GameState,
+        asking_bot_id: int,
+        question: str,
+        target_role: str,
     ):
         """Обработка голосования ботов"""
         # Получаем всех игроков
@@ -578,11 +588,11 @@ class GameLogic:
             await self.announce_results(context, game_state)
 
     async def process_bot_final_guess(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            game_state: GameState,
-            bot_id: int,
-            guess: str
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        game_state: GameState,
+        bot_id: int,
+        guess: str,
     ):
         """Обработка финальной догадки бота"""
         # Извлекаем предполагаемого персонажа
@@ -616,7 +626,7 @@ class GameLogic:
     # ===== Управление игроками =====
 
     def prepare_player_exit(
-            self, lobby_id: int, exiting_player_id: int
+        self, lobby_id: int, exiting_player_id: int
     ) -> Dict[str, Any]:
         """Подготовка к выходу игрока: сбор информации до удаления"""
         game_state = self.storage.get_game(lobby_id)
@@ -654,9 +664,9 @@ class GameLogic:
 
         # Проверяем, голосовал ли игрок
         if (
-                game_state.status == GameStatus.VOTING
-                and game_state.current_vote
-                and exiting_player_id in game_state.current_vote.votes
+            game_state.status == GameStatus.VOTING
+            and game_state.current_vote
+            and exiting_player_id in game_state.current_vote.votes
         ):
             result["had_voted"] = True
 
@@ -664,11 +674,11 @@ class GameLogic:
         return result
 
     async def process_player_exit(
-            self,
-            context: ContextTypes.DEFAULT_TYPE,
-            lobby_id: int,
-            exiting_player_id: int,
-            exit_info: Dict[str, Any],
+        self,
+        context: ContextTypes.DEFAULT_TYPE,
+        lobby_id: int,
+        exiting_player_id: int,
+        exit_info: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Обработка выхода игрока после сбора информации"""
         game_state = self.storage.get_game(lobby_id)
@@ -731,7 +741,7 @@ class GameLogic:
         return game_state.get_current_player() if game_state else None
 
     async def get_question_history(
-            self, update: Update, context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ):
         """Показывает историю вопросов пользователя"""
         user_id = update.effective_user.id

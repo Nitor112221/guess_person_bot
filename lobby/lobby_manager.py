@@ -490,10 +490,7 @@ class LobbyManager:
 
             self.db._connection.commit()
 
-            return {
-                "success": True,
-                "message": "Игра начата"
-            }
+            return {"success": True, "message": "Игра начата"}
 
         except Exception as e:
             self.db._connection.rollback()
@@ -521,11 +518,17 @@ class LobbyManager:
             current_host, status, current_bots_state = lobby_data
 
             if current_host != host_id:
-                return {"success": False, "message": "Только хост может изменять настройки ботов"}
+                return {
+                    "success": False,
+                    "message": "Только хост может изменять настройки ботов",
+                }
 
             # Проверяем, что игра не запущена
             if status == 'playing':
-                return {"success": False, "message": "Нельзя изменять настройки ботов во время игры"}
+                return {
+                    "success": False,
+                    "message": "Нельзя изменять настройки ботов во время игры",
+                }
 
             # Переключаем состояние
             new_bots_state = not bool(current_bots_state)
@@ -543,7 +546,7 @@ class LobbyManager:
             return {
                 "success": True,
                 "has_bots": new_bots_state,
-                "message": f"Боты {'включены' if new_bots_state else 'выключены'}"
+                "message": f"Боты {'включены' if new_bots_state else 'выключены'}",
             }
 
         except Exception as e:
@@ -562,7 +565,9 @@ class LobbyManager:
             if not lobby_info or not lobby_info.has_bots:
                 return {"success": False, "message": "Боты не включены в этом лобби"}
 
-            bot_count = len(list(filter(lambda x : x['user_id'] < 0, lobby_info.players)))
+            bot_count = len(
+                list(filter(lambda x: x['user_id'] < 0, lobby_info.players))
+            )
 
             # Добавляем одного бота
             bot_id = -(bot_count + 1)
@@ -572,7 +577,7 @@ class LobbyManager:
                 INSERT INTO lobby_players (lobby_id, user_id)
                 VALUES (?, ?)
                 """,
-                (lobby_id, bot_id)
+                (lobby_id, bot_id),
             )
 
             self.db.cursor.execute(
@@ -581,7 +586,7 @@ class LobbyManager:
                 SET current_players = current_players + 1
                 WHERE lobby_id = ?
                 """,
-                (lobby_id,)
+                (lobby_id,),
             )
 
             self.db._connection.commit()
@@ -589,7 +594,7 @@ class LobbyManager:
             return {
                 "success": True,
                 "message": "Бот добавлен в лобби",
-                "bot_id": bot_id
+                "bot_id": bot_id,
             }
 
         except Exception as e:
@@ -603,9 +608,12 @@ class LobbyManager:
             # Получаем информацию о лобби
             lobby_info = self.get_lobby_info(lobby_id)
             if not lobby_info or lobby_info.has_bots:
-                return {"success": False, "message": "Боты включены включены в этом лобби"}
+                return {
+                    "success": False,
+                    "message": "Боты включены включены в этом лобби",
+                }
 
-            bots = list(filter(lambda x : x['user_id'] < 0, lobby_info.players))
+            bots = list(filter(lambda x: x['user_id'] < 0, lobby_info.players))
             if not bots:
                 return {
                     "success": False,
@@ -617,7 +625,7 @@ class LobbyManager:
                 DELETE FROM lobby_players
                 WHERE lobby_id = ? AND user_id = ?
                 """,
-                (lobby_id, bots[-1]['user_id'])
+                (lobby_id, bots[-1]['user_id']),
             )
 
             self.db.cursor.execute(
@@ -626,7 +634,7 @@ class LobbyManager:
                 SET current_players = current_players - 1
                 WHERE lobby_id = ?
                 """,
-                (lobby_id,)
+                (lobby_id,),
             )
 
             self.db._connection.commit()
@@ -634,7 +642,7 @@ class LobbyManager:
             return {
                 "success": True,
                 "message": "Бот удалён из лобби",
-                "bot_id": bots[-1]['user_id']
+                "bot_id": bots[-1]['user_id'],
             }
 
         except Exception as e:
