@@ -42,16 +42,6 @@ class ServiceContainer:
             # Обновляем ссылку в lobby_manager
             self.lobby_manager.game_manager = self._game_logic
 
-            # Подготавливаем клиента
-            load_dotenv()
-            YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
-            YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
-            self.AI_client = OpenAI(
-                api_key=YANDEX_CLOUD_API_KEY,
-                base_url="https://llm.api.cloud.yandex.net/v1",
-                project=YANDEX_CLOUD_FOLDER
-            )
-
             self._initialized = True
             logger.info("ServiceContainer инициализирован")
 
@@ -66,11 +56,6 @@ class ServiceContainer:
     def game_manager(self):
         """Алиас для совместимости со старым кодом"""
         return self.game_logic
-
-    @property
-    def ai_client(self):
-        """Получение AI_client"""
-        return self.AI_client
 
     def get_game_notifier(self):
         """Получение GameNotifier для тестирования"""

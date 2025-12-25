@@ -376,7 +376,6 @@ async def my_lobby_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def leave_lobby(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Выход из лобби"""
-    # TODO: надо удалять пользователя из игры,если игра активна
     query = update.callback_query
     await query.answer()
 
@@ -578,7 +577,6 @@ async def process_game_theme(update: Update, context: ContextTypes.DEFAULT_TYPE)
     final_theme = None
     if theme and theme.lower() not in ['скип', 'skip']:
         final_theme = theme
-        lobby_manager.set_lobby_theme(lobby_id, theme)
 
     # Запускаем игровую сессию через GameLogic
     game_result = game_logic.start_game_session(lobby_id, final_theme)
@@ -668,7 +666,48 @@ async def process_game_theme(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
 
     return ConversationHandler.END
-# TODO: тут остановился
+
+
+async def cancel_game_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена начала игры"""
+    query = update.callback_query
+    await query.answer()
+
+    lobby_id = int(query.data.split("_")[-1])
+    user_id = update.effective_user.id
+
+    # Возвращаем статус лобби обратно на waiting
+    try:
+        lobby_manager.db.cursor.execute(
+            """
+            UPDATE lobbies
+            SET status = 'waiting'
+            WHERE lobby_id = ?
+            """,
+            (lobby_id,),
+        )
+        lobby_manager.db._connection.commit()
+
+        # Очищаем временные данные
+        if 'starting_game_lobby' in context.user_data:
+            del context.user_data['starting_game_lobby']
+
+        await query.edit_message_text(
+            "❌ Начало игры отменено.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Ошибка при отмене: {str(e)}",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("↩️ В меню", callback_data="back_to_menu")]]
+            ),
+        )
+
+    return ConversationHandler.END
+
 
 async def toggle_bots(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Включение/выключение ботов в лобби"""
@@ -712,10 +751,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await my_lobby_info(update, context)
     elif data == "leave_lobby":
         await leave_lobby(update, context)
+    if data.startswith('cancel_start_'):
+        return await cancel_game_start(update, context)
     elif data.startswith("toggle_bots_"):
         await toggle_bots(update, context)
     elif data.startswith('start_'):
-        await start_game(update, context)
+        return await start_game(update, context)
     elif data.startswith("leave_"):
         await leave_lobby(update, context)
     elif data.startswith("confirm_leave_"):

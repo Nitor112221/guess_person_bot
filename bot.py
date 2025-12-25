@@ -14,9 +14,9 @@ from telegram.ext import (
 )
 
 from ServiceController import ServiceContainer
-from config import SELECTING_ACTION, JOINING_LOBBY
+from config import SELECTING_ACTION, JOINING_LOBBY, WAITING_FOR_THEME
 from handlers.base_command import cancel, start, help_command, leave
-from lobby.commands import button_callback, process_invite_code, lobby_menu
+from lobby.commands import button_callback, process_invite_code, lobby_menu, process_game_theme
 
 load_dotenv()
 # Берем из переменных окружения (безопасно!)
@@ -69,6 +69,10 @@ def main() -> None:
             JOINING_LOBBY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, process_invite_code),
                 CallbackQueryHandler(button_callback, pattern="^back_to_menu$"),
+            ],
+            WAITING_FOR_THEME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, process_game_theme),
+                CallbackQueryHandler(button_callback, pattern="^cancel_start_"),
             ],
         },
         fallbacks=[

@@ -5,10 +5,10 @@ import logging
 from typing import Dict, Any, Optional, List
 
 from dotenv import load_dotenv
+from openai import OpenAI
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ServiceController import ServiceContainer
 from database_manager import DatabaseManager
 from game.bot_player import BotPlayer
 from game.game_state import GameState, GameStatus
@@ -19,6 +19,14 @@ from lobby.lobby_manager import LobbyManager
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
+YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
+AI_client = OpenAI(
+    api_key=YANDEX_CLOUD_API_KEY,
+    base_url="https://llm.api.cloud.yandex.net/v1",
+    project=YANDEX_CLOUD_FOLDER
+)
+
 
 class GameLogic:
     """Основная игровая логика - координация всех компонентов"""
@@ -57,7 +65,7 @@ class GameLogic:
         self._initialized = True
 
     # ===== Инициализация игры =====
-    def load_roles(self, num_players: int) -> List[str]:
+    def load_roles(self, num_players: int, theme) -> List[str]:
         """
         Генерирует список персонажей для игры "Угадай кто я" через YandexGPT API.
         """
@@ -71,7 +79,17 @@ class GameLogic:
         4. Балансируй между реальными историческими личностями и вымышленными персонажами
         5. Из профессиональных сфер, таких как история, игры, наука, мифология бери только самых популярный персонажей, которых знаю все.
         6. Нельзя брать персонажей, которые известны одному кругу людей - писателей не классики, или учёных, в одной области. Таких персонажей как Эйнштейн или Пушкин брать можно.
-        7. БЕРИ ТОЛЬКО СУПЕР ПОПУЛЯРНЫХ ПЕРСОНАЖЕЙ, ЧТОБЫ ДАЖЕ ЛЮДИ С НЕБОЛЬШИМ КРУГОЗОРОМ МОГЛИ ЕГО ОТГАДАТЬ 
+        7. БЕРИ ТОЛЬКО СУПЕР ПОПУЛЯРНЫХ ПЕРСОНАЖЕЙ, ЧТОБЫ ДАЖЕ ЛЮДИ С НЕБОЛЬШИМ КРУГОЗОРОМ МОГЛИ ЕГО ОТГАДАТЬ
+        8. НАЗВАНИЕ ПЕРСОНАЖЕЙ ДОЛЖНЫ БЫТЬ ТОЛЬКО НА КИРИЛЛИЦЕ
+        """
+
+        if theme:
+            prompt += f"""
+            **ТЕМА**
+            ВСЕ ПЕРСОНАЖИ ДОЛЖНЫ СООТВЕТСТВОВАТЬ ТЕМЕ {theme}
+        """
+
+        prompt += f"""
         **ФОРМАТ ВЫВОДА:**
         Верни ТОЛЬКО JSON объект, соответствующий структуре:
         {{
@@ -124,8 +142,7 @@ class GameLogic:
             }
 
             # Отправка запроса к YandexGPT
-            YANDEX_CLOUD_FOLDER = os.getenv("YANDEX_CLOUD_FOLDER")
-            response = ServiceContainer().ai_client.chat.completions.create(
+            response = AI_client.chat.completions.create(
                 model=f"gpt://{YANDEX_CLOUD_FOLDER}/yandexgpt/latest",
                 messages=[
                     {"role": "system",
@@ -192,9 +209,9 @@ class GameLogic:
             logger.error("Ошибка чтения roles.json")
             return []
 
-    def distribute_roles(self, num_players: int) -> List[str]:
+    def distribute_roles(self, num_players: int, theme) -> List[str]:
         """Распределение ролей между игроками"""
-        all_roles = self.load_roles(num_players)
+        all_roles = self.load_roles(num_players, theme)
 
         if len(all_roles) < num_players:
             logger.warning(
@@ -206,7 +223,7 @@ class GameLogic:
         selected_roles = random.sample(all_roles, num_players)
         return selected_roles
 
-    def start_game_session(self, lobby_id: int) -> Dict[str, Any]:
+    def start_game_session(self, lobby_id: int, theme: str = None) -> Dict[str, Any]:
         """Начинает игровую сессию"""
         try:
             # Получаем информацию о лобби
@@ -218,7 +235,7 @@ class GameLogic:
             player_ids = [player['user_id'] for player in lobby_info.players]
 
             # Распределяем роли
-            roles_list = self.distribute_roles(num_players)
+            roles_list = self.distribute_roles(num_players, theme)
             random.shuffle(roles_list)
 
             # Создаем словарь player_id -> role
@@ -277,6 +294,10 @@ class GameLogic:
             return
 
         question = update.message.text.strip()
+
+        # вопрос уже задан
+        if game_state.current_vote:
+            return
 
         # Проверяем, не является ли вопрос финальной догадкой
         if question.lower().startswith("я ") and "!" == question[-1]:
