@@ -24,7 +24,8 @@ BOT_TOKEN: Optional[str] = os.getenv("BOT_TOKEN")
 
 # Включаем логирование
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO,
+    filename="logs.log"
 )
 logging.getLogger('httpx').setLevel(logging.WARNING)  # убираем лишние логи
 logger = logging.getLogger(__name__)

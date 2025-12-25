@@ -11,9 +11,6 @@ from ServiceController import ServiceContainer
 from config import SELECTING_ACTION, CREATING_LOBBY, JOINING_LOBBY, WAITING_FOR_THEME
 from handlers.base_command import cancel_leave
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
 logger = logging.getLogger(__name__)
 
 # Инициализируем контейнер сервисов
